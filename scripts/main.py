@@ -20,7 +20,9 @@ plt.style.use("mpl_drip.custom")
 rng = np.random.default_rng(0)
 
 PLOTS_DIR = Path("plots")
-assert PLOTS_DIR.exists() or PLOTS_DIR.mkdir()
+PLOTS_DIR.exists()
+if not PLOTS_DIR.exists():
+    PLOTS_DIR.mkdir()
 SAVEFIG_KWARGS = dict(dpi=300, bbox_inches="tight")
 SAVE = True
 
