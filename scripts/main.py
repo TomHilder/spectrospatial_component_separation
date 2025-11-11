@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import mpl_drip  # noqa: F401
 import numpy as np
+import os
 from model import TwoLineMixture, all_phases, neg_ln_posterior
 from numpy import pi as π
 from spectracles import (
@@ -20,7 +21,7 @@ plt.style.use("mpl_drip.custom")
 rng = np.random.default_rng(0)
 
 PLOTS_DIR = Path("plots")
-assert PLOTS_DIR.exists() or PLOTS_DIR.mkdir()
+os.makedirs(PLOTS_DIR, exist_ok=True)
 SAVEFIG_KWARGS = dict(dpi=300, bbox_inches="tight")
 SAVE = True
 
