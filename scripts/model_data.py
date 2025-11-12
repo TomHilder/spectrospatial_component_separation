@@ -66,6 +66,7 @@ class GaussianLine(SpectralSpatialModel):
         return self.width(s) + self.w_min.val
 
 
+# TODO: Generalise to K lines
 # class KLineMixture(SpectralSpatialModel):
 #     # Model components
 #     lines: dict[str, GaussianLine]  # line models
@@ -133,9 +134,6 @@ class TwoLineMixture(SpectralSpatialModel):
 
 
 Δloss = 1e-2
-
-
-# TODO: Tune optimisation phases to match the new model
 
 N_STEPS = 2000
 
@@ -289,24 +287,23 @@ def get_phases(n_modes: tuple[int, int]) -> list[PhaseConfig]:
             "line2.velocity.coefficients": True,
         },
     )
-    adapt_w_min = PhaseConfig(
-        n_steps=N_STEPS,
-        optimiser=adam(1e-3),
-        Δloss_criterion=Δloss,
-        fix_status_updates={
-            # Allowed to vary:
-            "line1.w_min": False,
-            "line2.w_min": False,
-            # Fixed:
-            "line1.peak_raw.coefficients": True,
-            "line2.peak_raw.coefficients": True,
-            "line1.velocity.coefficients": True,
-            "line2.velocity.coefficients": True,
-            "line1.broadening_raw.coefficients": True,
-            "line2.broadening_raw.coefficients": True,
-        },
-    )
-
+    # adapt_w_min = PhaseConfig(
+    #     n_steps=N_STEPS,
+    #     optimiser=adam(1e-3),
+    #     Δloss_criterion=Δloss,
+    #     fix_status_updates={
+    #         # Allowed to vary:
+    #         "line1.w_min": False,
+    #         "line2.w_min": False,
+    #         # Fixed:
+    #         "line1.peak_raw.coefficients": True,
+    #         "line2.peak_raw.coefficients": True,
+    #         "line1.velocity.coefficients": True,
+    #         "line2.velocity.coefficients": True,
+    #         "line1.broadening_raw.coefficients": True,
+    #         "line2.broadening_raw.coefficients": True,
+    #     },
+    # )
     return [
         A_coeffs_init,
         v_coeffs_init,
