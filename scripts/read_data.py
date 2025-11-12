@@ -91,21 +91,21 @@ plt.show()
 
 print(data.shape)  # (velocity, y, x)
 
-i_x_lower = 500
-i_x_upper = 600
-i_y_lower = 500
-i_y_upper = 600
+# i_x_lower = 500
+# i_x_upper = 600
+# i_y_lower = 500
+# i_y_upper = 600
 
-# i_x_centre = data.shape[2] // 2
-# i_y_centre = data.shape[1] // 2
+i_x_centre = data.shape[2] // 2
+i_y_centre = data.shape[1] // 2
 
-# x_ext = 280
-# y_ext = 280
+x_ext = 400
+y_ext = 400
 
-# i_x_lower = i_x_centre - x_ext // 2
-# i_x_upper = i_x_centre + x_ext // 2
-# i_y_lower = i_y_centre - y_ext // 2
-# i_y_upper = i_y_centre + y_ext // 2
+i_x_lower = i_x_centre - x_ext // 2
+i_x_upper = i_x_centre + x_ext // 2
+i_y_lower = i_y_centre - y_ext // 2
+i_y_upper = i_y_centre + y_ext // 2
 
 trunc_data = data[:, i_y_lower:i_y_upper, i_x_lower:i_x_upper]
 trunc_rms = rms[i_y_lower:i_y_upper, i_x_lower:i_x_upper]

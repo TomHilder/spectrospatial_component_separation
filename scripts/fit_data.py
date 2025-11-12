@@ -76,7 +76,7 @@ spatial_data = SpatialDataGeneric(x=x_points, y=y_points, idx=jnp.arange(ny * ny
 kernel_peak = Matern32
 kernel_velocity = Matern32
 kernel_broadening = Matern52
-n_modes = (101, 101)
+n_modes = (201, 201)
 # Need to account for if I use different larger nx, ny which is MORE image, and MORE sky area
 # But I want the same physical scale, so length scale in pixels should decrease as nx increases
 ls_kwargs_pv = dict(initial=π / 7 / (nx / 100), fixed=True)
@@ -175,16 +175,21 @@ plt.show()
 
 
 # Plot some random spectra with peak > 1x RMS and their fits
-rms_thresh = 1
-mask = jnp.nanmax(data, axis=0) > rms_thresh * rms
+rms_thresh = 10
+
+n_spectra = 24
+
+mask = jnp.nanmax(data, axis=0) > rms_thresh * np.nanmean(u_data)
 y_indices, x_indices = jnp.where(mask)
-selected_indices = rng.choice(len(x_indices), size=5, replace=False)
+selected_indices = rng.choice(len(x_indices), size=n_spectra, replace=False)
 
 pred_spectra = jax.vmap(pred_model, in_axes=(0, None))(vels, spatial_data)
 component_1 = jax.vmap(pred_model.line1, in_axes=(0, None))(vels, spatial_data)
 component_2 = jax.vmap(pred_model.line2, in_axes=(0, None))(vels, spatial_data)
 
-fig, ax = plt.subplots(5, 1, figsize=(10, 10), layout="compressed", sharex=True, sharey=True)
+fig, ax = plt.subplots(
+    n_spectra, 1, figsize=(10, 2 * n_spectra), layout="compressed", sharex=True, sharey=False
+)
 for i, idx in enumerate(selected_indices):
     y = y_indices[idx]
     x = x_indices[idx]
