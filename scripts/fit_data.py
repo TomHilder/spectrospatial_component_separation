@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import mpl_drip  # noqa: F401
 import numpy as np
-from model_data import TwoLineMixture, get_phases, neg_ln_posterior
+from model_data import ThreeLineMixture, TwoLineMixture, get_phases, neg_ln_posterior
 from mpl_drip import colormaps  # noqa: F401
 from numpy import pi as π
 from spectracles import (
@@ -18,7 +18,7 @@ from spectracles import (
 )
 
 plt.style.use("mpl_drip.custom")
-rng = np.random.default_rng(0)
+rng = np.random.default_rng(6742)
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 DATA_FNAME = "ic1613_C+D+tp_hi21cm_0p8kms_30as.fits"
@@ -29,7 +29,8 @@ assert DATA_PATH.exists(), f"Data file not found: {DATA_PATH}"
 assert TRUNC_DATA_PATH.exists(), f"Truncated data file not found: {TRUNC_DATA_PATH}"
 
 
-PLOTS_DIR = Path("plots_ic1613_two_line_mixture")
+# PLOTS_DIR = Path("plots_ic1613_two_line_mixture")
+PLOTS_DIR = Path("m33")
 PLOTS_DIR.exists()
 if not PLOTS_DIR.exists():
     PLOTS_DIR.mkdir()
@@ -72,11 +73,19 @@ y_grid = jnp.linspace(-PAD_FAC * π, PAD_FAC * π, ny)
 x_points, y_points = np.meshgrid(x_grid, y_grid)
 spatial_data = SpatialDataGeneric(x=x_points, y=y_points, idx=jnp.arange(ny * ny))
 
+# Number of components to fit
+N_COMPONENTS = 3
+
 # Modes
-kernel_peak = Matern32
-kernel_velocity = Matern32
+n_modes = (51, 51)
+
+# Kernels
+# kernel_peak = Matern32
+# kernel_velocity = Matern32
+kernel_peak = Matern52
+kernel_velocity = Matern52
 kernel_broadening = Matern52
-n_modes = (201, 201)
+
 # Need to account for if I use different larger nx, ny which is MORE image, and MORE sky area
 # But I want the same physical scale, so length scale in pixels should decrease as nx increases
 ls_kwargs_pv = dict(initial=π / 7 / (nx / 100), fixed=True)
@@ -84,26 +93,42 @@ ls_kwargs_w = dict(initial=π / 5 / (nx / 100), fixed=True)
 var_kwargs_pv = dict(initial=1.0, fixed=True)
 var_kwargs_w = dict(initial=1.0, fixed=True)
 peak_kernels = [
-    kernel_peak(length_scale=Parameter(**ls_kwargs_pv), variance=Parameter(**var_kwargs_pv))
-    for _ in range(2)
+    kernel_peak(
+        length_scale=Parameter(**ls_kwargs_pv),
+        variance=Parameter(**var_kwargs_pv),
+    )
+    for _ in range(N_COMPONENTS)
 ]
 velocity_kernels = [
-    kernel_velocity(length_scale=Parameter(**ls_kwargs_pv), variance=Parameter(**var_kwargs_pv))
-    for _ in range(2)
+    kernel_velocity(
+        length_scale=Parameter(**ls_kwargs_pv),
+        variance=Parameter(**var_kwargs_pv),
+    )
+    for _ in range(N_COMPONENTS)
 ]
 broadening_kernels = [
-    kernel_broadening(length_scale=Parameter(**ls_kwargs_w), variance=Parameter(**var_kwargs_w))
-    for _ in range(2)
+    kernel_broadening(
+        length_scale=Parameter(**ls_kwargs_w),
+        variance=Parameter(**var_kwargs_w),
+    )
+    for _ in range(N_COMPONENTS)
 ]
+v_syst_inrc = 1.0
+v_syst_offs = jnp.linspace(-v_syst_inrc, v_syst_inrc, N_COMPONENTS)
 v_systs = [
-    Parameter(initial=init_v_syst - 1, fixed=False),
-    Parameter(initial=init_v_syst + 1, fixed=False),
+    Parameter(initial=init_v_syst + v_syst_offs[i], fixed=False) for i in range(N_COMPONENTS)
 ]
 w_min = Parameter(initial=init_w_min, fixed=True)
 
 # Build the model
+if N_COMPONENTS == 2:
+    model_cls = TwoLineMixture
+elif N_COMPONENTS == 3:
+    model_cls = ThreeLineMixture
+else:
+    raise ValueError("N_COMPONENTS must be 2 or 3")
 my_model = build_model(
-    TwoLineMixture,
+    model_cls,
     n_modes=n_modes,
     peak_kernels=peak_kernels,
     velocity_kernels=velocity_kernels,
@@ -111,7 +136,7 @@ my_model = build_model(
     v_systs=v_systs,
     w_min=w_min,
 )
-phases = get_phases(n_modes)
+phases = get_phases(n_modes, n_components=N_COMPONENTS)
 init_model = my_model.get_locked_model()
 
 schedule = OptimiserSchedule(model=my_model, loss_fn=neg_ln_posterior, phase_configs=phases)
@@ -132,32 +157,49 @@ plt.show()
 pred_model = schedule.model_history[-1].get_locked_model()
 
 # Plot the inferred fields next to the true fields
-pred_model_A1 = pred_model.line1.peak(spatial_data) * peak_intensity
-pred_model_A2 = pred_model.line2.peak(spatial_data) * peak_intensity
-pred_model_v1 = pred_model.line1.velocity_obs(spatial_data) - init_v_syst
-pred_model_v2 = pred_model.line2.velocity_obs(spatial_data) - init_v_syst
-pred_model_σ1 = pred_model.line1.width(spatial_data) + init_w_min
-pred_model_σ2 = pred_model.line2.width(spatial_data) + init_w_min
+if N_COMPONENTS == 2:
+    lines_pred_funcs = [pred_model.line1, pred_model.line2]
+elif N_COMPONENTS == 3:
+    lines_pred_funcs = [pred_model.line1, pred_model.line2, pred_model.line3]
 
-A_max = max(pred_model_A1.max(), pred_model_A2.max())
-v_max = max(jnp.abs(pred_model_v1).max(), jnp.abs(pred_model_v2).max())
-w_max = max(pred_model_σ1.max(), pred_model_σ2.max())
+pred_model_As = [
+    lines_pred_funcs[i].peak(spatial_data) * peak_intensity for i in range(N_COMPONENTS)
+]
+pred_model_vs = [
+    lines_pred_funcs[i].velocity_obs(spatial_data) - init_v_syst for i in range(N_COMPONENTS)
+]
+pred_model_σs = [lines_pred_funcs[i].width(spatial_data) + init_w_min for i in range(N_COMPONENTS)]
+
+
+def max_of_components(component_list, abs=False):
+    if abs:
+        tran_f = jnp.abs
+    else:
+        tran_f = lambda x: x  # noqa: E731
+
+    return max([tran_f(component_list[i]).max() for i in range(N_COMPONENTS)])
+
+
+A_max = max_of_components(pred_model_As)
+v_max = max_of_components(pred_model_vs, abs=True)
+w_max = max_of_components(pred_model_σs)
+
 A_kwargs = dict(cmap="viridis", origin="lower", vmin=0, vmax=A_max)
 v_kwargs = dict(cmap="RdBu_r", origin="lower", vmin=-v_max, vmax=v_max)
 w_kwargs = dict(cmap="magma", origin="lower", vmin=0, vmax=w_max)
 
-fig, axes = plt.subplots(3, 2, figsize=(8, 16), layout="compressed")
+fig, axes = plt.subplots(3, N_COMPONENTS, figsize=(8, 8 * N_COMPONENTS), layout="compressed")
 fs = 14
 
-axes[0, 0].set_title("Component 1")
-axes[0, 1].set_title("Component 2")
 
-im00 = axes[0, 0].imshow(pred_model_A1.reshape(ny, nx), **A_kwargs, interpolation="gaussian")
-im01 = axes[0, 1].imshow(pred_model_A2.reshape(ny, nx), **A_kwargs, interpolation="gaussian")
-im10 = axes[1, 0].imshow(pred_model_v1.reshape(ny, nx), **v_kwargs, interpolation="gaussian")
-im11 = axes[1, 1].imshow(pred_model_v2.reshape(ny, nx), **v_kwargs, interpolation="gaussian")
-im20 = axes[2, 0].imshow(pred_model_σ1.reshape(ny, nx), **w_kwargs, interpolation="gaussian")
-im21 = axes[2, 1].imshow(pred_model_σ2.reshape(ny, nx), **w_kwargs, interpolation="gaussian")
+for i in range(N_COMPONENTS):
+    pred_model_A = pred_model_As[i]
+    pred_model_v = pred_model_vs[i]
+    pred_model_σ = pred_model_σs[i]
+    im00 = axes[0, i].imshow(pred_model_A.reshape(ny, nx), **A_kwargs, interpolation="gaussian")
+    im10 = axes[1, i].imshow(pred_model_v.reshape(ny, nx), **v_kwargs, interpolation="gaussian")
+    im20 = axes[2, i].imshow(pred_model_σ.reshape(ny, nx), **w_kwargs, interpolation="gaussian")
+    axes[0, i].set_title(f"Component {i + 1}")
 
 for ax in axes.flatten():
     ax.set_xticks([])
@@ -167,7 +209,7 @@ axes[-1, 1].set_xlabel(r"$x$ sky [pix]")
 axes[-1, 0].set_ylabel(r"$y$ sky [pix]")
 
 fig.colorbar(im00, ax=axes[0, :], location="right", label="Line peak [K]")
-fig.colorbar(im11, ax=axes[1, :], location="right", label="Line centre [km/s]")
+fig.colorbar(im10, ax=axes[1, :], location="right", label="Line centre [km/s]")
 fig.colorbar(im20, ax=axes[2, :], location="right", label="Line width [km/s]")
 if SAVE:
     plt.savefig(PLOTS_DIR / "inferred_fields.pdf", **SAVEFIG_KWARGS)
@@ -175,7 +217,7 @@ plt.show()
 
 
 # Plot some random spectra with peak > 1x RMS and their fits
-rms_thresh = 10
+rms_thresh = 5
 
 n_spectra = 24
 
@@ -184,11 +226,14 @@ y_indices, x_indices = jnp.where(mask)
 selected_indices = rng.choice(len(x_indices), size=n_spectra, replace=False)
 
 pred_spectra = jax.vmap(pred_model, in_axes=(0, None))(vels, spatial_data)
-component_1 = jax.vmap(pred_model.line1, in_axes=(0, None))(vels, spatial_data)
-component_2 = jax.vmap(pred_model.line2, in_axes=(0, None))(vels, spatial_data)
+
+components = [
+    jax.vmap(lines_pred_funcs[i], in_axes=(0, None))(vels, spatial_data)
+    for i in range(N_COMPONENTS)
+]
 
 fig, ax = plt.subplots(
-    n_spectra, 1, figsize=(10, 2 * n_spectra), layout="compressed", sharex=True, sharey=False
+    n_spectra, 1, figsize=(12, 2 * n_spectra), layout="compressed", sharex=True, sharey=False
 )
 for i, idx in enumerate(selected_indices):
     y = y_indices[idx]
@@ -212,24 +257,16 @@ for i, idx in enumerate(selected_indices):
         lw=2.5,
         c="red",
     )
-    ax[i].plot(
-        vels,
-        component_1[:, y * nx + x] * peak_intensity,
-        alpha=1,
-        label="Component 1",
-        lw=2.5,
-        ls="--",
-        c="C0",
-    )
-    ax[i].plot(
-        vels,
-        component_2[:, y * nx + x] * peak_intensity,
-        alpha=1,
-        label="Component 2",
-        lw=2.5,
-        ls="--",
-        c="C1",
-    )
+    for j in range(N_COMPONENTS):
+        ax[i].plot(
+            vels,
+            components[j][:, y * nx + x] * peak_intensity,
+            alpha=1,
+            label=f"Component {j + 1}",
+            lw=2.5,
+            ls="--",
+            c=f"C{j}",
+        )
     residuals = spectrum - pred_spectrum
     ax[i].plot(
         vels,
@@ -246,7 +283,7 @@ ax[-1].set_xlabel("Velocity [km/s]")
 ax[-1].set_ylabel("Intensity [K]")
 # ax[0].set_title("Spectral Fits at Selected Pixels")
 # Add a legend to the first subplot only
-ax[0].legend(loc="upper right", fontsize=14)
+ax[0].legend(loc="upper right", bbox_to_anchor=(1.25, 1.0), fontsize=14)
 if SAVE:
     plt.savefig(PLOTS_DIR / "spectral_fits.pdf", **SAVEFIG_KWARGS)
 plt.show()
@@ -268,7 +305,10 @@ for i, line in enumerate([pred_model.line1, pred_model.line2], start=1):
 # - colorbar for residuals column also at the top of the figure above the residuals column,
 #   and using the red_white_blue colormap from mpl_drip
 # Do 10 rows/channels evenly spaced between -250 and -220 km/s
-channel_velocities = jnp.linspace(-250, -220, 10)
+v_c_ch = -180
+v_pad_ch = 15
+# channel_velocities = jnp.linspace(-250, -220, 10)
+channel_velocities = jnp.linspace(v_c_ch - v_pad_ch, v_c_ch + v_pad_ch, 10)
 channel_indices = jnp.array([jnp.argmin(jnp.abs(vels - v)) for v in channel_velocities])
 channel_velocities_actual = vels[channel_indices]
 
@@ -319,24 +359,30 @@ plt.show()
 
 # Now a version where instead of the model channel maps, we plot the individual components
 # So the columns are: data, component 1, component 2, residuals
-fig, axes = plt.subplots(10, 4, figsize=(12, 18), layout="compressed", dpi=100)
+fig, axes = plt.subplots(
+    10, 2 + N_COMPONENTS, figsize=(12, 10 + 4 * N_COMPONENTS), layout="compressed", dpi=100
+)
 for i, channel_idx in enumerate(channel_indices):
     vel = vels[channel_idx]
     data_channel = data[channel_idx, :, :].reshape(ny, nx) * peak_intensity
-    comp1_channel = component_1[channel_idx, :].reshape(ny, nx) * peak_intensity
-    comp2_channel = component_2[channel_idx, :].reshape(ny, nx) * peak_intensity
+
+    comp_channels = [
+        components[i][channel_idx, :].reshape(ny, nx) * peak_intensity for i in range(N_COMPONENTS)
+    ]
     residuals_channel = (
         data[channel_idx, :, :].reshape(ny, nx) - pred_spectra[channel_idx, :].reshape(ny, nx)
     ) * peak_intensity
 
     im0 = axes[i, 0].imshow(data_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
-    im1 = axes[i, 1].imshow(comp1_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
-    im2 = axes[i, 2].imshow(comp2_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
-    im3 = axes[i, 3].imshow(
+    for j, comp_channel in enumerate(comp_channels):
+        im1 = axes[i, 1 + j].imshow(
+            comp_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max
+        )
+    im2 = axes[i, 1 + N_COMPONENTS].imshow(
         residuals_channel, origin="lower", cmap="red_white_blue_r", vmin=-A_max / 5, vmax=A_max / 5
     )
 
-    for j in range(4):
+    for j in range(2 + N_COMPONENTS):
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([])
 
@@ -352,15 +398,20 @@ for i, channel_idx in enumerate(channel_indices):
     )
 # Add colorbars at the top
 cbar0 = fig.colorbar(
-    im0, ax=axes[:, 0:3], location="bottom", label="Intensity [K]", aspect=20, pad=0.01
+    im0,
+    ax=axes[:, 0 : 1 + N_COMPONENTS],
+    location="bottom",
+    label="Intensity [K]",
+    aspect=(N_COMPONENTS + 1) * 10,
+    pad=0.01,
 )
 cbar1 = fig.colorbar(
-    im3, ax=axes[:, 3], location="bottom", label="Residuals [K]", aspect=10, pad=0.01
+    im2, ax=axes[:, 1 + N_COMPONENTS], location="bottom", label="Residuals [K]", aspect=10, pad=0.01
 )
 axes[0, 0].set_title("Data")
-axes[0, 1].set_title("Component 1")
-axes[0, 2].set_title("Component 2")
-axes[0, 3].set_title("Residuals")
+for j in range(N_COMPONENTS):
+    axes[0, 1 + j].set_title(f"Component {j + 1}")
+axes[0, 1 + N_COMPONENTS].set_title("Residuals")
 if SAVE:
     plt.savefig(PLOTS_DIR / "channel_maps_components.pdf", **SAVEFIG_KWARGS)
 plt.show()
@@ -392,26 +443,27 @@ plt.show()
 
 
 # Another channels plot but with all the columns data, model, components, residuals
-fig, axes = plt.subplots(10, 5, figsize=(15, 18), layout="compressed", dpi=100)
+fig, axes = plt.subplots(
+    10, 3 + N_COMPONENTS, figsize=(15, 10 + 4 * N_COMPONENTS), layout="compressed", dpi=100
+)
 for i, channel_idx in enumerate(channel_indices):
     vel = vels[channel_idx]
     data_channel = data[channel_idx, :, :].reshape(ny, nx) * peak_intensity
     pred_channel = pred_spectra[channel_idx, :].reshape(ny, nx) * peak_intensity
-    comp1_channel = component_1[channel_idx, :].reshape(ny, nx) * peak_intensity
-    comp2_channel = component_2[channel_idx, :].reshape(ny, nx) * peak_intensity
     residuals_channel = (
         data[channel_idx, :, :].reshape(ny, nx) - pred_spectra[channel_idx, :].reshape(ny, nx)
     ) * peak_intensity
 
     im0 = axes[i, 0].imshow(data_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
     im1 = axes[i, 1].imshow(pred_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
-    im2 = axes[i, 2].imshow(comp1_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
-    im3 = axes[i, 3].imshow(comp2_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
-    im4 = axes[i, 4].imshow(
+    for j in range(N_COMPONENTS):
+        comp_channel = components[j][channel_idx, :].reshape(ny, nx) * peak_intensity
+        axes[i, 2 + j].imshow(comp_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
+    im2 = axes[i, 2 + N_COMPONENTS].imshow(
         residuals_channel, origin="lower", cmap="red_white_blue_r", vmin=-A_max / 5, vmax=A_max / 5
     )
 
-    for j in range(5):
+    for j in range(3 + N_COMPONENTS):
         axes[i, j].set_xticks([])
         axes[i, j].set_yticks([])
 
@@ -427,16 +479,64 @@ for i, channel_idx in enumerate(channel_indices):
     )
 # Add colorbars at the top
 cbar0 = fig.colorbar(
-    im0, ax=axes[:, 0:4], location="bottom", label="Intensity [K]", aspect=20, pad=0.01
+    im0,
+    ax=axes[:, 0:5],
+    location="bottom",
+    label="Intensity [K]",
+    aspect=(N_COMPONENTS + 2) * 10,
+    pad=0.01,
 )
 cbar1 = fig.colorbar(
-    im4, ax=axes[:, 4], location="bottom", label="Residuals [K]", aspect=10, pad=0.01
+    im2, ax=axes[:, 2 + N_COMPONENTS], location="bottom", label="Residuals [K]", aspect=10, pad=0.01
 )
 axes[0, 0].set_title("Data")
 axes[0, 1].set_title("Model")
-axes[0, 2].set_title("Component 1")
-axes[0, 3].set_title("Component 2")
-axes[0, 4].set_title("Residuals")
+for j in range(N_COMPONENTS):
+    axes[0, 2 + j].set_title(f"Component {j + 1}")
+axes[0, 2 + N_COMPONENTS].set_title("Residuals")
 if SAVE:
     plt.savefig(PLOTS_DIR / "channel_maps_full.pdf", **SAVEFIG_KWARGS)
+plt.show()
+
+
+# ==
+
+pred_model_Is = [
+    pred_model_As[i] * pred_model_σs[i] * jnp.sqrt(2 * jnp.pi) for i in range(N_COMPONENTS)
+]
+
+I_max = max(pred_model_Is[i].max() for i in range(N_COMPONENTS)) * 0.9
+w_max = max(pred_model_σs[i].max() for i in range(N_COMPONENTS))
+
+
+I_kwargs = dict(cmap="viridis", origin="lower", vmin=0, vmax=I_max)
+
+fig, axes = plt.subplots(4, N_COMPONENTS, figsize=(8, 16), layout="compressed")
+fs = 14
+
+for i in range(N_COMPONENTS):
+    axes[0, i].set_title(f"Component {i + 1}")
+    pred_model_A = pred_model_As[i]
+    pred_model_v = pred_model_vs[i]
+    pred_model_σ = pred_model_σs[i]
+    pred_model_I = pred_model_Is[i]
+    im00 = axes[0, i].imshow(pred_model_I.reshape(ny, nx), **I_kwargs, interpolation="gaussian")
+    im10 = axes[1, i].imshow(pred_model_A.reshape(ny, nx), **A_kwargs, interpolation="gaussian")
+    im20 = axes[2, i].imshow(pred_model_v.reshape(ny, nx), **v_kwargs, interpolation="gaussian")
+    im30 = axes[3, i].imshow(pred_model_σ.reshape(ny, nx), **w_kwargs, interpolation="gaussian")
+
+
+for ax in axes.flatten():
+    ax.set_xticks([])
+    ax.set_yticks([])
+axes[-1, 0].set_xlabel(r"x sky [pix]")
+axes[-1, 0].set_ylabel(r"y sky [pix]")
+
+fig.colorbar(im00, ax=axes[0, :], location="right", label="Int Intensity [K km/s]")
+fig.colorbar(im10, ax=axes[1, :], location="right", label="Line peak [K]")
+fig.colorbar(im20, ax=axes[2, :], location="right", label="Line centre [km/s]")
+fig.colorbar(im30, ax=axes[3, :], location="right", label="Line width [km/s]")
+
+if SAVE:
+    plt.savefig(PLOTS_DIR / "inferred_fields.pdf", **SAVEFIG_KWARGS)
 plt.show()

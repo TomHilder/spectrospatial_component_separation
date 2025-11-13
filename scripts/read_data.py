@@ -8,7 +8,8 @@ plt.style.use("mpl_drip.custom")
 rng = np.random.default_rng(0)
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-DATA_FNAME = "ic1613_C+D+tp_hi21cm_0p8kms_30as.fits"
+# DATA_FNAME = "ic1613_C+D+tp_hi21cm_0p8kms_30as.fits"
+DATA_FNAME = "m33_flatcube.fits"
 DATA_PATH = DATA_DIR / DATA_FNAME
 assert DATA_PATH.exists(), f"Data file not found: {DATA_PATH}"
 
@@ -21,10 +22,14 @@ with fits.open(DATA_PATH) as hdul:
 
 def velocities_from_header(header):
     # Check that it's m/s
-    assert header["CUNIT3"] == "m/s", "Velocity unit is not m/s"
-    return header["CRVAL3"] + header["CDELT3"] * (
+    if header["CUNIT3"] == "m/s":
+        fac = 1
+    else:
+        fac = 1000
+    vels = header["CRVAL3"] + header["CDELT3"] * (
         np.arange(1, header["NAXIS3"] + 1) - header["CRPIX3"]
     )
+    return vels * fac
 
 
 # Calculate velocity axis in km/s
@@ -91,21 +96,21 @@ plt.show()
 
 print(data.shape)  # (velocity, y, x)
 
-# i_x_lower = 500
-# i_x_upper = 600
-# i_y_lower = 500
-# i_y_upper = 600
+i_x_lower = 500
+i_x_upper = 660
+i_y_lower = 500
+i_y_upper = 660
 
-i_x_centre = data.shape[2] // 2
-i_y_centre = data.shape[1] // 2
+# i_x_centre = data.shape[2] // 2
+# i_y_centre = data.shape[1] // 2
 
-x_ext = 400
-y_ext = 400
+# x_ext = 400
+# y_ext = 400
 
-i_x_lower = i_x_centre - x_ext // 2
-i_x_upper = i_x_centre + x_ext // 2
-i_y_lower = i_y_centre - y_ext // 2
-i_y_upper = i_y_centre + y_ext // 2
+# i_x_lower = i_x_centre - x_ext // 2
+# i_x_upper = i_x_centre + x_ext // 2
+# i_y_lower = i_y_centre - y_ext // 2
+# i_y_upper = i_y_centre + y_ext // 2
 
 trunc_data = data[:, i_y_lower:i_y_upper, i_x_lower:i_x_upper]
 trunc_rms = rms[i_y_lower:i_y_upper, i_x_lower:i_x_upper]
