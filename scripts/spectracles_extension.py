@@ -10,7 +10,7 @@ def is_valid_identifier(s: str) -> bool:
     return s.isidentifier() and not keyword.iskeyword(s)
 
 
-def dict_to_module(d: dict) -> eqx.Module:
+def dict_to_module(d: dict, module_name: str | None = None) -> eqx.Module:
     """
     Convert a dict to an equinox Module with attributes matching the keys.
 
@@ -45,7 +45,8 @@ def dict_to_module(d: dict) -> eqx.Module:
     # All checks passed, create the module with annotations
     annotations = {key: type(value) for key, value in d.items()}
 
-    DictModule = type("DictModule", (eqx.Module,), {"__annotations__": annotations})
+    name = "DictModule" if module_name is None else module_name
+    DictModule = type(name, (eqx.Module,), {"__annotations__": annotations})
 
     # Create instance and set attributes
     module = object.__new__(DictModule)
