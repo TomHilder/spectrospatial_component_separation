@@ -100,11 +100,11 @@ if __name__ == "__main__":
     ls_kwargs_pv = dict(initial=PAD_FAC * π / 19 / (nx / 100), fixed=True)
     ls_kwargs_w = dict(initial=PAD_FAC * π / 13 / (nx / 100), fixed=True)
     ls_kwargs_s = dict(initial=PAD_FAC * π / 11 / (nx / 100), fixed=True)  # skew
-    # ls_kwargs_k = dict(initial=PAD_FAC * π / 5 / (nx / 100), fixed=True)  # kurtosis
+    ls_kwargs_k = dict(initial=PAD_FAC * π / 11 / (nx / 100), fixed=True)  # kurtosis
     var_kwargs_pv = dict(initial=1.0, fixed=True)
     var_kwargs_w = dict(initial=1.0, fixed=True)
     var_kwargs_s = dict(initial=0.1, fixed=True)  # skew
-    # var_kwargs_k = dict(initial=0.1, fixed=True)  # kurtosis
+    var_kwargs_k = dict(initial=0.1, fixed=True)  # kurtosis
     peak_kernels = [
         kernel_peak(
             length_scale=Parameter(**ls_kwargs_pv),
@@ -133,13 +133,13 @@ if __name__ == "__main__":
         )
         for _ in range(N_COMPONENTS)
     ]
-    # kurt_kernels = [
-    #     kernel_kurtosis(
-    #         length_scale=Parameter(**ls_kwargs_k),
-    #         variance=Parameter(**var_kwargs_k),
-    #     )
-    #     for _ in range(N_COMPONENTS)
-    # ]
+    kurt_kernels = [
+        kernel_kurtosis(
+            length_scale=Parameter(**ls_kwargs_k),
+            variance=Parameter(**var_kwargs_k),
+        )
+        for _ in range(N_COMPONENTS)
+    ]
     if N_COMPONENTS == 2:
         v_syst_offs = jnp.array([-1.0, 1.0])
     elif N_COMPONENTS == 3:
@@ -162,7 +162,7 @@ if __name__ == "__main__":
     ]
     w_min = Parameter(initial=init_w_min, fixed=True)
     h3_max = Parameter(initial=0.3, fixed=True)
-    # h4_max = Parameter(initial=0.3, fixed=True)
+    h4_max = Parameter(initial=0.3, fixed=True)
 
     # Build the model
     model_cls = KLineMixture
@@ -174,11 +174,11 @@ if __name__ == "__main__":
         velocity_kernels=velocity_kernels,
         broadening_kernels=broadening_kernels,
         skew_kernels=skew_kernels,
-        # kurt_kernels=kurt_kernels,
+        kurt_kernels=kurt_kernels,
         v_systs=v_systs,
         w_min=w_min,
         h3_max=h3_max,
-        # h4_max=h4_max,
+        h4_max=h4_max,
     )
     phases = get_phases(n_modes, n_components=N_COMPONENTS)
     init_model = my_model.get_locked_model()
@@ -212,19 +212,6 @@ if __name__ == "__main__":
 
     pred_model = schedule.model_history[-1].get_locked_model()
 
-    # # Plot the inferred fields next to the true fields
-    # if N_COMPONENTS == 2:
-    #     lines_pred_funcs = [pred_model.line1, pred_model.line2]
-    # elif N_COMPONENTS == 3:
-    #     lines_pred_funcs = [pred_model.line1, pred_model.line2, pred_model.line3]
-    # elif N_COMPONENTS == 5:
-    #     lines_pred_funcs = [
-    #         pred_model.line1,
-    #         pred_model.line2,
-    #         pred_model.line3,
-    #         pred_model.line4,
-    #         pred_model.line5,
-    #     ]
     # Plot the inferred fields next to the true fields
     lines_pred_funcs = [getattr(pred_model.lines, f"line{k + 1}") for k in range(pred_model.K)]
 
@@ -238,7 +225,7 @@ if __name__ == "__main__":
         lines_pred_funcs[i].width(spatial_data) + init_w_min for i in range(N_COMPONENTS)
     ]
     pred_model_ss = [lines_pred_funcs[i].h3(spatial_data) for i in range(N_COMPONENTS)]
-    # pred_model_ks = [lines_pred_funcs[i].h4(spatial_data) for i in range(N_COMPONENTS)]
+    pred_model_ks = [lines_pred_funcs[i].h4(spatial_data) for i in range(N_COMPONENTS)]
 
     def max_of_components(component_list, abs=False):
         if abs:
@@ -252,45 +239,13 @@ if __name__ == "__main__":
     v_max = max_of_components(pred_model_vs, abs=True)
     w_max = max_of_components(pred_model_σs)
     s_max = max_of_components(pred_model_ss, abs=True)
-    # k_max = max_of_components(pred_model_ks, abs=True)
+    k_max = max_of_components(pred_model_ks, abs=True)
 
     A_kwargs = dict(cmap="viridis", origin="lower", vmin=0, vmax=A_max)
     v_kwargs = dict(cmap="RdBu_r", origin="lower", vmin=-v_max, vmax=v_max)
     w_kwargs = dict(cmap="magma", origin="lower", vmin=0, vmax=w_max)
     s_kwargs = dict(cmap="PiYG", origin="lower", vmin=-s_max, vmax=s_max)
-    # k_kwargs = dict(cmap="RdBu_r", origin="lower", vmin=-k_max, vmax=k_max)
-
-    # fig, axes = plt.subplots(4, N_COMPONENTS, figsize=(8, 8 * N_COMPONENTS), layout="compressed")
-    # fs = 14
-
-    # for i in range(N_COMPONENTS):
-    #     pred_model_A = pred_model_As[i]
-    #     pred_model_v = pred_model_vs[i]
-    #     pred_model_σ = pred_model_σs[i]
-    #     pred_model_s = pred_model_ss[i]
-    #     # pred_model_k = pred_model_ks[i]
-    #     im00 = axes[0, i].imshow(pred_model_A.reshape(ny, nx), **A_kwargs, interpolation="gaussian")
-    #     im10 = axes[1, i].imshow(pred_model_v.reshape(ny, nx), **v_kwargs, interpolation="gaussian")
-    #     im20 = axes[2, i].imshow(pred_model_σ.reshape(ny, nx), **w_kwargs, interpolation="gaussian")
-    #     im30 = axes[3, i].imshow(pred_model_s.reshape(ny, nx), **s_kwargs, interpolation="gaussian")
-    #     # im40 = axes[4, i].imshow(pred_model_k.reshape(ny, nx), **k_kwargs, interpolation="gaussian")
-    #     axes[0, i].set_title(f"Component {i + 1}")
-
-    # for ax in axes.flatten():
-    #     ax.set_xticks([])
-    #     ax.set_yticks([])
-    # axes[-1, 0].set_xlabel(r"$x$ sky [pix]")
-    # axes[-1, 1].set_xlabel(r"$x$ sky [pix]")
-    # axes[-1, 0].set_ylabel(r"$y$ sky [pix]")
-
-    # fig.colorbar(im00, ax=axes[0, :], location="right", label="Line peak [K]")
-    # fig.colorbar(im10, ax=axes[1, :], location="right", label="Line centre [km/s]")
-    # fig.colorbar(im20, ax=axes[2, :], location="right", label="Line width [km/s]")
-    # fig.colorbar(im30, ax=axes[3, :], location="right", label="Line skew [h3]")
-    # # fig.colorbar(im40, ax=axes[4, :], location="right", label="Line kurtosis [h4]")
-    # if SAVE:
-    #     plt.savefig(PLOTS_DIR / "inferred_fields.pdf", **SAVEFIG_KWARGS)
-    # plt.show()
+    k_kwargs = dict(cmap="RdBu_r", origin="lower", vmin=-k_max, vmax=k_max)
 
     # Plot some random spectra with peak > 1x RMS and their fits
     rms_thresh = 5
@@ -367,7 +322,6 @@ if __name__ == "__main__":
     # Channel maps plot
     v_c_ch = -180
     v_pad_ch = 15
-    # channel_velocities = jnp.linspace(-250, -220, 10)
     channel_velocities = jnp.linspace(v_c_ch - v_pad_ch, v_c_ch + v_pad_ch, 10)
     channel_indices = jnp.array([jnp.argmin(jnp.abs(vels - v)) for v in channel_velocities])
     channel_velocities_actual = vels[channel_indices]
@@ -593,7 +547,7 @@ if __name__ == "__main__":
 
     I_kwargs = dict(cmap="viridis", origin="lower", vmin=0, vmax=I_max)
 
-    fig, axes = plt.subplots(5, N_COMPONENTS, figsize=(12, 16), layout="compressed")
+    fig, axes = plt.subplots(6, N_COMPONENTS, figsize=(16, 16), layout="compressed")
     fs = 14
 
     for i in range(N_COMPONENTS):
@@ -602,14 +556,14 @@ if __name__ == "__main__":
         pred_model_v = pred_model_vs[i]
         pred_model_σ = pred_model_σs[i]
         pred_model_s = pred_model_ss[i]
-        # pred_model_k = pred_model_ks[i]
+        pred_model_k = pred_model_ks[i]
         pred_model_I = pred_model_Is[i]
         im00 = axes[0, i].imshow(pred_model_I.reshape(ny, nx), **I_kwargs, interpolation="gaussian")
         im10 = axes[1, i].imshow(pred_model_A.reshape(ny, nx), **A_kwargs, interpolation="gaussian")
         im20 = axes[2, i].imshow(pred_model_v.reshape(ny, nx), **v_kwargs, interpolation="gaussian")
         im30 = axes[3, i].imshow(pred_model_σ.reshape(ny, nx), **w_kwargs, interpolation="gaussian")
         im40 = axes[4, i].imshow(pred_model_s.reshape(ny, nx), **s_kwargs, interpolation="gaussian")
-        # im50 = axes[5, i].imshow(pred_model_k.reshape(ny, nx), **k_kwargs, interpolation="gaussian")
+        im50 = axes[5, i].imshow(pred_model_k.reshape(ny, nx), **k_kwargs, interpolation="gaussian")
 
     for ax in axes.flatten():
         ax.set_xticks([])
@@ -622,7 +576,7 @@ if __name__ == "__main__":
     fig.colorbar(im20, ax=axes[2, :], location="right", label="Line centre [km/s]")
     fig.colorbar(im30, ax=axes[3, :], location="right", label="Line width [km/s]")
     fig.colorbar(im40, ax=axes[4, :], location="right", label="Line skew [h3]")
-    # fig.colorbar(im50, ax=axes[5, :], location="right", label="Line kurtosis [h4]")
+    fig.colorbar(im50, ax=axes[5, :], location="right", label="Line kurtosis [h4]")
 
     if SAVE:
         plt.savefig(PLOTS_DIR / "inferred_fields.pdf", **SAVEFIG_KWARGS)
@@ -631,24 +585,39 @@ if __name__ == "__main__":
     coeffs_kwargs = dict(cmap="RdBu", origin="lower", vmin=-3.0, vmax=3.0)
 
     # Plot the Fourier coefficients for each component
-    fig, axes = plt.subplots(N_COMPONENTS, 4, figsize=(16, 4 * N_COMPONENTS), layout="compressed")
+    fig, axes = plt.subplots(N_COMPONENTS, 5, figsize=(20, 4 * N_COMPONENTS), layout="compressed")
     for i in range(N_COMPONENTS):
         lines_pred_func = lines_pred_funcs[i]
         peak_coeffs = lines_pred_func.peak_raw.coefficients.val
         velocity_coeffs = lines_pred_func.velocity.coefficients.val
         broadening_coeffs = lines_pred_func.broadening_raw.coefficients.val
         skew_coeffs = lines_pred_func.skew_raw.coefficients.val
-        # kurtosis_coeffs = lines_pred_func.kurtosis_raw.coefficients.val
+        kurtosis_coeffs = lines_pred_func.kurtosis_raw.coefficients.val
 
-        axes[i, 0].imshow(peak_coeffs, **coeffs_kwargs)
+        cm = axes[i, 0].imshow(peak_coeffs, **coeffs_kwargs)
         axes[i, 1].imshow(velocity_coeffs, **coeffs_kwargs)
         axes[i, 2].imshow(broadening_coeffs, **coeffs_kwargs)
         axes[i, 3].imshow(skew_coeffs, **coeffs_kwargs)
-        # axes[i, 4].imshow(kurtosis_coeffs, **coeffs_kwargs)
+        axes[i, 4].imshow(kurtosis_coeffs, **coeffs_kwargs)
 
-        for j in range(4):
+        for j in range(5):
             axes[i, j].set_xticks([])
             axes[i, j].set_yticks([])
+
+    axes[0, 0].set_title("Peak Coefficients")
+    axes[0, 1].set_title("Velocity Coefficients")
+    axes[0, 2].set_title("Broadening Coefficients")
+    axes[0, 3].set_title("Skew Coefficients")
+    axes[0, 4].set_title("Kurtosis Coefficients")
+
+    plt.colorbar(
+        cm,
+        ax=axes[:, :],
+        location="bottom",
+        label="Z coeffs (not kernel PSD scaled, whitened in some sense)",
+        aspect=40,
+        pad=1e-2,
+    )
 
     if SAVE:
         plt.savefig(PLOTS_DIR / "fourier_coefficients.pdf", **SAVEFIG_KWARGS)
