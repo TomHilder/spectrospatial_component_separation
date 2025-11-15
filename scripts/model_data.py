@@ -14,6 +14,7 @@ from spectracles import (
     SpectralSpatialModel,
     l_bounded,
 )
+from spectracles_extension import dict_to_module
 
 A_LOWER = 1e-5
 
@@ -33,34 +34,18 @@ def neg_ln_posterior(model, velocities, xy_data, data, u_data, mask):
             0.0,
         )
     )
-    ln_prior_line1 = (
-        model.line1.peak_raw.prior_logpdf()
-        + model.line1.velocity.prior_logpdf()
-        + model.line1.broadening_raw.prior_logpdf()
-    )
-    ln_prior_line2 = (
-        model.line2.peak_raw.prior_logpdf()
-        + model.line2.velocity.prior_logpdf()
-        + model.line2.broadening_raw.prior_logpdf()
-    )
-    ln_prior_line3 = (
-        model.line3.peak_raw.prior_logpdf()
-        + model.line3.velocity.prior_logpdf()
-        + model.line3.broadening_raw.prior_logpdf()
-    )
-    ln_prior_line4 = (
-        model.line4.peak_raw.prior_logpdf()
-        + model.line4.velocity.prior_logpdf()
-        + model.line4.broadening_raw.prior_logpdf()
-    )
-    ln_prior_line5 = (
-        model.line5.peak_raw.prior_logpdf()
-        + model.line5.velocity.prior_logpdf()
-        + model.line5.broadening_raw.prior_logpdf()
-    )
-    return -1 * (
-        ln_like + ln_prior_line1 + ln_prior_line2 + ln_prior_line3 + ln_prior_line4 + ln_prior_line5
-    )
+
+    # Prior contributions from all lines
+    ln_prior = 0.0
+    for k in range(model.K):
+        line = getattr(model.lines, f"line{k + 1}")
+        ln_prior += (
+            line.peak_raw.prior_logpdf()
+            + line.velocity.prior_logpdf()
+            + line.broadening_raw.prior_logpdf()
+        )
+
+    return -1 * (ln_like + ln_prior)
 
 
 class GaussianLine(SpectralSpatialModel):
@@ -89,38 +74,6 @@ class GaussianLine(SpectralSpatialModel):
 
     def w2_obs(self, s) -> Array:
         return self.width(s) + self.w_min.val
-
-
-# TODO: Generalise to K lines
-# class KLineMixture(SpectralSpatialModel):
-#     # Model components
-#     lines: dict[str, GaussianLine]  # line models
-
-#     def __init__(
-#         self,
-#         K: int,
-#         n_modes: tuple[int, int],
-#         peak_kernels: list[Kernel],
-#         velocity_kernels: list[Kernel],
-#         broadening_kernels: list[Kernel],
-#         v_systs: list[Parameter],
-#         w_min: Parameter,
-#     ):
-#         self.lines = {}
-#         for k in range(K):
-#             self.lines[f"line{k + 1}"] = GaussianLine(
-#                 peak_raw=FourierGP(n_modes=n_modes, kernel=peak_kernels[k]),
-#                 velocity=FourierGP(n_modes=n_modes, kernel=velocity_kernels[k]),
-#                 broadening_raw=FourierGP(n_modes=n_modes, kernel=broadening_kernels[k]),
-#                 v_syst=v_systs[k],
-#                 w_min=w_min,
-#             )
-
-#     def __call__(self, velocities, spatial_data):
-#         return sum(
-#             jax.vmap(line, in_axes=(0, None))(velocities, spatial_data)
-#             for line in self.lines.values()
-#         )
 
 
 class TwoLineMixture(SpectralSpatialModel):
@@ -267,6 +220,8 @@ class FiveLineMixture(SpectralSpatialModel):
 class KLineMixture(SpectralSpatialModel):
     # Model components
     lines: dict[str, GaussianLine]  # line models
+    # Number of lines
+    K: int
 
     def __init__(
         self,
@@ -278,27 +233,31 @@ class KLineMixture(SpectralSpatialModel):
         v_systs: list[Parameter],
         w_min: Parameter,
     ):
-        self.lines = {}
+        self.K = K
+        lines = {}
         for k in range(K):
-            self.lines[f"line{k + 1}"] = GaussianLine(
+            lines[f"line{k + 1}"] = GaussianLine(
                 peak_raw=FourierGP(n_modes=n_modes, kernel=peak_kernels[k]),
                 velocity=FourierGP(n_modes=n_modes, kernel=velocity_kernels[k]),
                 broadening_raw=FourierGP(n_modes=n_modes, kernel=broadening_kernels[k]),
                 v_syst=v_systs[k],
                 w_min=w_min,
             )
+        # print(lines)
+        self.lines = dict_to_module(lines)
+        # print("==============================")
+        # print(self.lines)
 
     def __call__(self, velocities, spatial_data):
-        # Convert dict to list of modules for vmapping
-        lines_list = list(self.lines.values())
+        # Explicitly collect lines in order: line1, line2, ..., lineK
+        lines_list = [getattr(self.lines, f"line{k + 1}") for k in range(self.K)]
 
-        # Apply each line to all velocities, then sum
-        def apply_line(line):
-            return jax.vmap(line, in_axes=(0, None))(velocities, spatial_data)
+        # Apply each line and sum
+        result = jnp.zeros_like(velocities)
+        for line in lines_list:
+            result += line(velocities, spatial_data)
 
-        # vmap over the lines and sum results
-        results = jax.vmap(apply_line)(lines_list)
-        return jnp.sum(results, axis=0)
+        return result
 
 
 Δloss = 1e-2
@@ -332,7 +291,7 @@ def get_phases(n_modes: tuple[int, int], n_components: int) -> list[PhaseConfig]
         if init_peak:
             init_dicts.append(
                 {
-                    f"line{k + 1}.peak_raw.coefficients": jnp.array(
+                    f"lines.line{k + 1}.peak_raw.coefficients": jnp.array(
                         rng.standard_normal(n_modes),
                     )
                     for k in range(n_components)
@@ -341,7 +300,7 @@ def get_phases(n_modes: tuple[int, int], n_components: int) -> list[PhaseConfig]
         if init_velocity:
             init_dicts.append(
                 {
-                    f"line{k + 1}.velocity.coefficients": jnp.array(
+                    f"lines.line{k + 1}.velocity.coefficients": jnp.array(
                         rng.standard_normal(n_modes),
                     )
                     for k in range(n_components)
@@ -350,7 +309,7 @@ def get_phases(n_modes: tuple[int, int], n_components: int) -> list[PhaseConfig]
         if init_broadening:
             init_dicts.append(
                 {
-                    f"line{k + 1}.broadening_raw.coefficients": jnp.array(
+                    f"lines.line{k + 1}.broadening_raw.coefficients": jnp.array(
                         rng.standard_normal(n_modes),
                     )
                     for k in range(n_components)
@@ -362,16 +321,19 @@ def get_phases(n_modes: tuple[int, int], n_components: int) -> list[PhaseConfig]
             Δloss_criterion=Δloss,
             fix_status_updates=merge_dicts(
                 [
-                    {f"line{k + 1}.peak_raw.coefficients": fix_peak for k in range(n_components)},
                     {
-                        f"line{k + 1}.velocity.coefficients": fix_velocity
+                        f"lines.line{k + 1}.peak_raw.coefficients": fix_peak
                         for k in range(n_components)
                     },
                     {
-                        f"line{k + 1}.broadening_raw.coefficients": fix_broadening
+                        f"lines.line{k + 1}.velocity.coefficients": fix_velocity
                         for k in range(n_components)
                     },
-                    {f"line{k + 1}.w_min": fix_w_min for k in range(n_components)},
+                    {
+                        f"lines.line{k + 1}.broadening_raw.coefficients": fix_broadening
+                        for k in range(n_components)
+                    },
+                    {f"lines.line{k + 1}.w_min": fix_w_min for k in range(n_components)},
                 ]
             ),
             param_val_updates=merge_dicts(init_dicts),

@@ -7,6 +7,7 @@ import mpl_drip  # noqa: F401
 import numpy as np
 from model_data import (
     FiveLineMixture,
+    KLineMixture,
     ThreeLineMixture,
     TwoLineMixture,
     get_phases,
@@ -71,11 +72,11 @@ if __name__ == "__main__":
     spectrum_mean = jnp.sum(vels * mean_spectrum) / jnp.sum(mean_spectrum)
     spectrum_var = jnp.sum(((vels - spectrum_mean) ** 2) * mean_spectrum) / jnp.sum(mean_spectrum)
     # init_w_min = jnp.sqrt(spectrum_var) / 3  # There are two components
-    init_w_min = 2
-    print(f"Initial w_min guess: {init_w_min:.2f} km/s")
+    init_w_min = 1
+    # print(f"Initial w_min guess: {init_w_min:.2f} km/s")
 
     # Assemble a pixel grid
-    PAD_FAC = 0.3
+    PAD_FAC = 0.5
     nλ, ny, nx = data.shape
     x_grid = jnp.linspace(-PAD_FAC * π, PAD_FAC * π, nx)
     y_grid = jnp.linspace(-PAD_FAC * π, PAD_FAC * π, ny)
@@ -86,7 +87,7 @@ if __name__ == "__main__":
     N_COMPONENTS = 5
 
     # Modes
-    n_modes = (601, 601)
+    n_modes = (101, 101)
 
     # Kernels
     # kernel_peak = Matern32
@@ -126,24 +127,28 @@ if __name__ == "__main__":
         )
         for _ in range(N_COMPONENTS)
     ]
-    v_syst_inrc = 1.0
-    v_syst_offs = jnp.linspace(-v_syst_inrc, v_syst_inrc, N_COMPONENTS)
+    # v_syst_inrc = 1.0
+    # v_syst_offs = jnp.linspace(-v_syst_inrc, v_syst_inrc, N_COMPONENTS)
+    # print(v_syst_offs)
+    v_syst_offs = jnp.array([-5.0, -1.0, 0.0, 1.0, 5.0])
     v_systs = [
         Parameter(initial=init_v_syst + v_syst_offs[i], fixed=False) for i in range(N_COMPONENTS)
     ]
     w_min = Parameter(initial=init_w_min, fixed=True)
 
     # Build the model
-    if N_COMPONENTS == 2:
-        model_cls = TwoLineMixture
-    elif N_COMPONENTS == 3:
-        model_cls = ThreeLineMixture
-    elif N_COMPONENTS == 5:
-        model_cls = FiveLineMixture
-    else:
-        raise ValueError("N_COMPONENTS must be 2, 3, or 5")
+    model_cls = KLineMixture
+    # if N_COMPONENTS == 2:
+    #     model_cls = TwoLineMixture
+    # elif N_COMPONENTS == 3:
+    #     model_cls = ThreeLineMixture
+    # elif N_COMPONENTS == 5:
+    #     model_cls = FiveLineMixture
+    # else:
+    #     raise ValueError("N_COMPONENTS must be 2, 3, or 5")
     my_model = build_model(
         model_cls,
+        K=N_COMPONENTS,
         n_modes=n_modes,
         peak_kernels=peak_kernels,
         velocity_kernels=velocity_kernels,
@@ -172,19 +177,21 @@ if __name__ == "__main__":
 
     pred_model = schedule.model_history[-1].get_locked_model()
 
+    # # Plot the inferred fields next to the true fields
+    # if N_COMPONENTS == 2:
+    #     lines_pred_funcs = [pred_model.line1, pred_model.line2]
+    # elif N_COMPONENTS == 3:
+    #     lines_pred_funcs = [pred_model.line1, pred_model.line2, pred_model.line3]
+    # elif N_COMPONENTS == 5:
+    #     lines_pred_funcs = [
+    #         pred_model.line1,
+    #         pred_model.line2,
+    #         pred_model.line3,
+    #         pred_model.line4,
+    #         pred_model.line5,
+    #     ]
     # Plot the inferred fields next to the true fields
-    if N_COMPONENTS == 2:
-        lines_pred_funcs = [pred_model.line1, pred_model.line2]
-    elif N_COMPONENTS == 3:
-        lines_pred_funcs = [pred_model.line1, pred_model.line2, pred_model.line3]
-    elif N_COMPONENTS == 5:
-        lines_pred_funcs = [
-            pred_model.line1,
-            pred_model.line2,
-            pred_model.line3,
-            pred_model.line4,
-            pred_model.line5,
-        ]
+    lines_pred_funcs = [getattr(pred_model.lines, f"line{k + 1}") for k in range(pred_model.K)]
 
     pred_model_As = [
         lines_pred_funcs[i].peak(spatial_data) * peak_intensity for i in range(N_COMPONENTS)
@@ -311,11 +318,11 @@ if __name__ == "__main__":
     plt.show()
 
     # Print the inferred global parameters
-    print("Global parameters:")
-    for i, line in enumerate([pred_model.line1, pred_model.line2], start=1):
-        print(f"Line {i}:")
-        print(f"  v_syst = {line.v_syst.val[0]:.2f} km/s")
-        print(f"  w_min = {line.w_min.val[0]:.2f} km/s")
+    # print("Global parameters:")
+    # for i, line in enumerate([pred_model.line1, pred_model.line2], start=1):
+    #     print(f"Line {i}:")
+    #     print(f"  v_syst = {line.v_syst.val[0]:.2f} km/s")
+    #     print(f"  w_min = {line.w_min.val[0]:.2f} km/s")
 
     # Channel maps plot
     # Description:

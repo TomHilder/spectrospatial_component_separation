@@ -101,8 +101,8 @@ if __name__ == "__main__":
     i_x_centre = data.shape[2] // 2
     i_y_centre = data.shape[1] // 2
 
-    x_ext = 600
-    y_ext = 600
+    x_ext = 200
+    y_ext = 200
 
     i_x_lower = i_x_centre - x_ext // 2
     i_x_upper = i_x_centre + x_ext // 2
