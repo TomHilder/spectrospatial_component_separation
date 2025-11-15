@@ -33,9 +33,34 @@ def neg_ln_posterior(model, velocities, xy_data, data, u_data, mask):
             0.0,
         )
     )
-    ln_prior_line1 = model.line1.peak_raw.prior_logpdf() + model.line1.velocity.prior_logpdf()
-    ln_prior_line2 = model.line2.peak_raw.prior_logpdf() + model.line2.velocity.prior_logpdf()
-    return -1 * (ln_like + ln_prior_line1 + ln_prior_line2)
+    ln_prior_line1 = (
+        model.line1.peak_raw.prior_logpdf()
+        + model.line1.velocity.prior_logpdf()
+        + model.line1.broadening_raw.prior_logpdf()
+    )
+    ln_prior_line2 = (
+        model.line2.peak_raw.prior_logpdf()
+        + model.line2.velocity.prior_logpdf()
+        + model.line2.broadening_raw.prior_logpdf()
+    )
+    ln_prior_line3 = (
+        model.line3.peak_raw.prior_logpdf()
+        + model.line3.velocity.prior_logpdf()
+        + model.line3.broadening_raw.prior_logpdf()
+    )
+    ln_prior_line4 = (
+        model.line4.peak_raw.prior_logpdf()
+        + model.line4.velocity.prior_logpdf()
+        + model.line4.broadening_raw.prior_logpdf()
+    )
+    ln_prior_line5 = (
+        model.line5.peak_raw.prior_logpdf()
+        + model.line5.velocity.prior_logpdf()
+        + model.line5.broadening_raw.prior_logpdf()
+    )
+    return -1 * (
+        ln_like + ln_prior_line1 + ln_prior_line2 + ln_prior_line3 + ln_prior_line4 + ln_prior_line5
+    )
 
 
 class GaussianLine(SpectralSpatialModel):
@@ -177,6 +202,68 @@ class ThreeLineMixture(SpectralSpatialModel):
         return line1 + line2 + line3
 
 
+class FiveLineMixture(SpectralSpatialModel):
+    # Model components
+    line1: GaussianLine  # line models
+    line2: GaussianLine  # line models
+    line3: GaussianLine  # line models
+    line4: GaussianLine  # line models
+    line5: GaussianLine  # line models
+
+    def __init__(
+        self,
+        n_modes: tuple[int, int],
+        peak_kernels: list[Kernel],
+        velocity_kernels: list[Kernel],
+        broadening_kernels: list[Kernel],
+        v_systs: list[Parameter],
+        w_min: Parameter,
+    ):
+        self.line1 = GaussianLine(
+            peak_raw=FourierGP(n_modes=n_modes, kernel=peak_kernels[0]),
+            velocity=FourierGP(n_modes=n_modes, kernel=velocity_kernels[0]),
+            broadening_raw=FourierGP(n_modes=n_modes, kernel=broadening_kernels[0]),
+            v_syst=v_systs[0],
+            w_min=w_min,
+        )
+        self.line2 = GaussianLine(
+            peak_raw=FourierGP(n_modes=n_modes, kernel=peak_kernels[1]),
+            velocity=FourierGP(n_modes=n_modes, kernel=velocity_kernels[1]),
+            broadening_raw=FourierGP(n_modes=n_modes, kernel=broadening_kernels[1]),
+            v_syst=v_systs[1],
+            w_min=w_min,
+        )
+        self.line3 = GaussianLine(
+            peak_raw=FourierGP(n_modes=n_modes, kernel=peak_kernels[2]),
+            velocity=FourierGP(n_modes=n_modes, kernel=velocity_kernels[2]),
+            broadening_raw=FourierGP(n_modes=n_modes, kernel=broadening_kernels[2]),
+            v_syst=v_systs[2],
+            w_min=w_min,
+        )
+        self.line4 = GaussianLine(
+            peak_raw=FourierGP(n_modes=n_modes, kernel=peak_kernels[3]),
+            velocity=FourierGP(n_modes=n_modes, kernel=velocity_kernels[3]),
+            broadening_raw=FourierGP(n_modes=n_modes, kernel=broadening_kernels[3]),
+            v_syst=v_systs[3],
+            w_min=w_min,
+        )
+        self.line5 = GaussianLine(
+            peak_raw=FourierGP(n_modes=n_modes, kernel=peak_kernels[4]),
+            velocity=FourierGP(n_modes=n_modes, kernel=velocity_kernels[4]),
+            broadening_raw=FourierGP(n_modes=n_modes, kernel=broadening_kernels[4]),
+            v_syst=v_systs[4],
+            w_min=w_min,
+        )
+
+    def __call__(self, velocities, spatial_data):
+        line1 = self.line1(velocities, spatial_data)
+        line2 = self.line2(velocities, spatial_data)
+        line3 = self.line3(velocities, spatial_data)
+        line4 = self.line4(velocities, spatial_data)
+        line5 = self.line5(velocities, spatial_data)
+        return line1 + line2 + line3 + line4 + line5
+
+
 class KLineMixture(SpectralSpatialModel):
     # Model components
     lines: dict[str, GaussianLine]  # line models
@@ -202,16 +289,21 @@ class KLineMixture(SpectralSpatialModel):
             )
 
     def __call__(self, velocities, spatial_data):
-        # TODO: this probably doesn't work with JIT
-        result = jnp.zeros((velocities.shape[0],) + spatial_data.shape[1:])
-        for line in self.lines.values():
-            result += jax.vmap(line, in_axes=(0, None))(velocities, spatial_data)
-        return result
+        # Convert dict to list of modules for vmapping
+        lines_list = list(self.lines.values())
+
+        # Apply each line to all velocities, then sum
+        def apply_line(line):
+            return jax.vmap(line, in_axes=(0, None))(velocities, spatial_data)
+
+        # vmap over the lines and sum results
+        results = jax.vmap(apply_line)(lines_list)
+        return jnp.sum(results, axis=0)
 
 
 Δloss = 1e-2
 
-N_STEPS = 2000
+N_STEPS = 200
 
 
 def merge_dicts(dict_list):
@@ -222,8 +314,8 @@ def merge_dicts(dict_list):
 
 
 def get_phases(n_modes: tuple[int, int], n_components: int) -> list[PhaseConfig]:
-    lr_1 = 1e-2
-    lr_2 = 1e-3
+    lr_1 = 1e-1
+    lr_2 = 1e-2
 
     def get_phase(
         n_steps=N_STEPS,
