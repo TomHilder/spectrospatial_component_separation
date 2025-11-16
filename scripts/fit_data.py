@@ -326,122 +326,122 @@ if __name__ == "__main__":
     channel_indices = jnp.array([jnp.argmin(jnp.abs(vels - v)) for v in channel_velocities])
     channel_velocities_actual = vels[channel_indices]
 
-    fig, axes = plt.subplots(10, 3, figsize=(10, 18), layout="compressed", dpi=100)
-    for i, channel_idx in enumerate(channel_indices):
-        vel = vels[channel_idx]
-        data_channel = data[channel_idx, :, :].reshape(ny, nx) * peak_intensity
-        pred_channel = pred_spectra[channel_idx, :].reshape(ny, nx) * peak_intensity
-        residuals_channel = (
-            data[channel_idx, :, :].reshape(ny, nx) - pred_spectra[channel_idx, :].reshape(ny, nx)
-        ) * peak_intensity
+    # fig, axes = plt.subplots(10, 3, figsize=(10, 18), layout="compressed", dpi=100)
+    # for i, channel_idx in enumerate(channel_indices):
+    #     vel = vels[channel_idx]
+    #     data_channel = data[channel_idx, :, :].reshape(ny, nx) * peak_intensity
+    #     pred_channel = pred_spectra[channel_idx, :].reshape(ny, nx) * peak_intensity
+    #     residuals_channel = (
+    #         data[channel_idx, :, :].reshape(ny, nx) - pred_spectra[channel_idx, :].reshape(ny, nx)
+    #     ) * peak_intensity
 
-        im0 = axes[i, 0].imshow(data_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
-        im1 = axes[i, 1].imshow(pred_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
-        im2 = axes[i, 2].imshow(
-            residuals_channel,
-            origin="lower",
-            cmap="red_white_blue_r",
-            vmin=-A_max / 5,
-            vmax=A_max / 5,
-        )
+    #     im0 = axes[i, 0].imshow(data_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
+    #     im1 = axes[i, 1].imshow(pred_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
+    #     im2 = axes[i, 2].imshow(
+    #         residuals_channel,
+    #         origin="lower",
+    #         cmap="red_white_blue_r",
+    #         vmin=-A_max / 5,
+    #         vmax=A_max / 5,
+    #     )
 
-        for j in range(3):
-            axes[i, j].set_xticks([])
-            axes[i, j].set_yticks([])
+    #     for j in range(3):
+    #         axes[i, j].set_xticks([])
+    #         axes[i, j].set_yticks([])
 
-        axes[i, 0].text(
-            0.05 * nx,
-            0.95 * nx,
-            f"{vel:.1f} km/s",
-            color="white",
-            fontsize=12,
-            va="top",
-            ha="left",
-            bbox=dict(facecolor="black", alpha=0.1, pad=2, edgecolor=None, linewidth=0),
-        )
+    #     axes[i, 0].text(
+    #         0.05 * nx,
+    #         0.95 * nx,
+    #         f"{vel:.1f} km/s",
+    #         color="white",
+    #         fontsize=12,
+    #         va="top",
+    #         ha="left",
+    #         bbox=dict(facecolor="black", alpha=0.1, pad=2, edgecolor=None, linewidth=0),
+    #     )
 
-    # Add colorbars at the top
-    cbar0 = fig.colorbar(
-        im0, ax=axes[:, 0:2], location="bottom", label="Intensity [K]", aspect=20, pad=0.01
-    )
-    cbar1 = fig.colorbar(
-        im2, ax=axes[:, 2], location="bottom", label="Residuals [K]", aspect=10, pad=0.01
-    )
-    axes[0, 0].set_title("Data")
-    axes[0, 1].set_title("Model")
-    axes[0, 2].set_title("Residuals")
-    if SAVE:
-        plt.savefig(PLOTS_DIR / "channel_maps.pdf", **SAVEFIG_KWARGS)
-    plt.show()
+    # # Add colorbars at the top
+    # cbar0 = fig.colorbar(
+    #     im0, ax=axes[:, 0:2], location="bottom", label="Intensity [K]", aspect=20, pad=0.01
+    # )
+    # cbar1 = fig.colorbar(
+    #     im2, ax=axes[:, 2], location="bottom", label="Residuals [K]", aspect=10, pad=0.01
+    # )
+    # axes[0, 0].set_title("Data")
+    # axes[0, 1].set_title("Model")
+    # axes[0, 2].set_title("Residuals")
+    # if SAVE:
+    #     plt.savefig(PLOTS_DIR / "channel_maps.pdf", **SAVEFIG_KWARGS)
+    # plt.show()
 
-    # Now a version where instead of the model channel maps, we plot the individual components
-    # So the columns are: data, component 1, component 2, residuals
-    fig, axes = plt.subplots(
-        10, 2 + N_COMPONENTS, figsize=(12, 10 + 4 * N_COMPONENTS), layout="compressed", dpi=100
-    )
-    for i, channel_idx in enumerate(channel_indices):
-        vel = vels[channel_idx]
-        data_channel = data[channel_idx, :, :].reshape(ny, nx) * peak_intensity
+    # # Now a version where instead of the model channel maps, we plot the individual components
+    # # So the columns are: data, component 1, component 2, residuals
+    # fig, axes = plt.subplots(
+    #     10, 2 + N_COMPONENTS, figsize=(12, 10 + 4 * N_COMPONENTS), layout="compressed", dpi=100
+    # )
+    # for i, channel_idx in enumerate(channel_indices):
+    #     vel = vels[channel_idx]
+    #     data_channel = data[channel_idx, :, :].reshape(ny, nx) * peak_intensity
 
-        comp_channels = [
-            components[i][channel_idx, :].reshape(ny, nx) * peak_intensity
-            for i in range(N_COMPONENTS)
-        ]
-        residuals_channel = (
-            data[channel_idx, :, :].reshape(ny, nx) - pred_spectra[channel_idx, :].reshape(ny, nx)
-        ) * peak_intensity
+    #     comp_channels = [
+    #         components[i][channel_idx, :].reshape(ny, nx) * peak_intensity
+    #         for i in range(N_COMPONENTS)
+    #     ]
+    #     residuals_channel = (
+    #         data[channel_idx, :, :].reshape(ny, nx) - pred_spectra[channel_idx, :].reshape(ny, nx)
+    #     ) * peak_intensity
 
-        im0 = axes[i, 0].imshow(data_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
-        for j, comp_channel in enumerate(comp_channels):
-            im1 = axes[i, 1 + j].imshow(
-                comp_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max
-            )
-        im2 = axes[i, 1 + N_COMPONENTS].imshow(
-            residuals_channel,
-            origin="lower",
-            cmap="red_white_blue_r",
-            vmin=-A_max / 5,
-            vmax=A_max / 5,
-        )
+    #     im0 = axes[i, 0].imshow(data_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max)
+    #     for j, comp_channel in enumerate(comp_channels):
+    #         im1 = axes[i, 1 + j].imshow(
+    #             comp_channel, origin="lower", cmap="viridis", vmin=0, vmax=A_max
+    #         )
+    #     im2 = axes[i, 1 + N_COMPONENTS].imshow(
+    #         residuals_channel,
+    #         origin="lower",
+    #         cmap="red_white_blue_r",
+    #         vmin=-A_max / 5,
+    #         vmax=A_max / 5,
+    #     )
 
-        for j in range(2 + N_COMPONENTS):
-            axes[i, j].set_xticks([])
-            axes[i, j].set_yticks([])
+    #     for j in range(2 + N_COMPONENTS):
+    #         axes[i, j].set_xticks([])
+    #         axes[i, j].set_yticks([])
 
-        axes[i, 0].text(
-            0.05 * nx,
-            0.95 * nx,
-            f"{vel:.1f} km/s",
-            color="white",
-            fontsize=12,
-            va="top",
-            ha="left",
-            bbox=dict(facecolor="black", alpha=0.1, pad=2, edgecolor=None, linewidth=0),
-        )
-    # Add colorbars at the top
-    cbar0 = fig.colorbar(
-        im0,
-        ax=axes[:, 0 : 1 + N_COMPONENTS],
-        location="bottom",
-        label="Intensity [K]",
-        aspect=(N_COMPONENTS + 1) * 10,
-        pad=0.01,
-    )
-    cbar1 = fig.colorbar(
-        im2,
-        ax=axes[:, 1 + N_COMPONENTS],
-        location="bottom",
-        label="Residuals [K]",
-        aspect=10,
-        pad=0.01,
-    )
-    axes[0, 0].set_title("Data")
-    for j in range(N_COMPONENTS):
-        axes[0, 1 + j].set_title(f"Component {j + 1}")
-    axes[0, 1 + N_COMPONENTS].set_title("Residuals")
-    if SAVE:
-        plt.savefig(PLOTS_DIR / "channel_maps_components.pdf", **SAVEFIG_KWARGS)
-    plt.show()
+    #     axes[i, 0].text(
+    #         0.05 * nx,
+    #         0.95 * nx,
+    #         f"{vel:.1f} km/s",
+    #         color="white",
+    #         fontsize=12,
+    #         va="top",
+    #         ha="left",
+    #         bbox=dict(facecolor="black", alpha=0.1, pad=2, edgecolor=None, linewidth=0),
+    #     )
+    # # Add colorbars at the top
+    # cbar0 = fig.colorbar(
+    #     im0,
+    #     ax=axes[:, 0 : 1 + N_COMPONENTS],
+    #     location="bottom",
+    #     label="Intensity [K]",
+    #     aspect=(N_COMPONENTS + 1) * 10,
+    #     pad=0.01,
+    # )
+    # cbar1 = fig.colorbar(
+    #     im2,
+    #     ax=axes[:, 1 + N_COMPONENTS],
+    #     location="bottom",
+    #     label="Residuals [K]",
+    #     aspect=10,
+    #     pad=0.01,
+    # )
+    # axes[0, 0].set_title("Data")
+    # for j in range(N_COMPONENTS):
+    #     axes[0, 1 + j].set_title(f"Component {j + 1}")
+    # axes[0, 1 + N_COMPONENTS].set_title("Residuals")
+    # if SAVE:
+    #     plt.savefig(PLOTS_DIR / "channel_maps_components.pdf", **SAVEFIG_KWARGS)
+    # plt.show()
 
     # Residuals cube
     residuals_cube = data - pred_spectra.reshape((nλ, ny, nx))
@@ -621,4 +621,98 @@ if __name__ == "__main__":
 
     if SAVE:
         plt.savefig(PLOTS_DIR / "fourier_coefficients.pdf", **SAVEFIG_KWARGS)
+    plt.show()
+
+    # Plot of dominant component in terms of integrated intensity per spaxel
+    dominant_component_idx = jnp.argmax(
+        jnp.array([pred_model_Is[i] for i in range(N_COMPONENTS)]), axis=0
+    ).reshape(ny, nx)
+    print("Dominant component index shape:", dominant_component_idx.shape)
+
+    from matplotlib.colors import ListedColormap
+
+    base_colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    component_colors = base_colors[:N_COMPONENTS]
+    discrete_cmap = ListedColormap(component_colors)
+
+    plt.figure(figsize=(8, 6))
+    im = plt.imshow(dominant_component_idx, cmap=discrete_cmap, origin="lower")
+    plt.colorbar(im, label="Dominant Component Index", ticks=jnp.arange(N_COMPONENTS))
+    plt.title("Dominant Spectral Component per Spaxel")
+    plt.xlabel("Pixel X")
+    plt.ylabel("Pixel Y")
+    plt.xticks([])
+    plt.yticks([])
+    if SAVE:
+        plt.savefig(PLOTS_DIR / "dominant_component_map.pdf", **SAVEFIG_KWARGS)
+    plt.show()
+
+    # Assemble masks for each component based on integrated intensity above some threshold
+    intensity_threshold = 0.3 * I_max  # Example threshold at 10%
+    component_masks = [
+        (pred_model_Is[i].reshape(ny, nx) > intensity_threshold) for i in range(N_COMPONENTS)
+    ]
+
+    # Plot the masks
+    fig, axes = plt.subplots(1, N_COMPONENTS, figsize=(4 * N_COMPONENTS, 4), layout="compressed")
+    for i in range(N_COMPONENTS):
+        im = axes[i].imshow(component_masks[i], cmap="gray", origin="lower")
+        axes[i].set_title(f"Component {i + 1} Mask")
+        axes[i].set_xticks([])
+        axes[i].set_yticks([])
+    if SAVE:
+        plt.savefig(PLOTS_DIR / "component_masks.pdf", **SAVEFIG_KWARGS)
+    plt.show()
+
+    inferred_v_systs = np.array([lines_pred_funcs[i].v_syst.val[0] for i in range(N_COMPONENTS)])
+    print("Inferred systemic velocities for each component:", inferred_v_systs)
+
+    # Make the inferred fields plot from before, but now overlay the masks with transparency
+    # The not masked regions shouldn't plot white on top, they should just be transparent
+    fig, axes = plt.subplots(6, N_COMPONENTS, figsize=(16, 16), layout="compressed")
+    fs = 14
+
+    mask_alpha = 0.95
+
+    dv_kwargs = dict(cmap="RdBu_r", origin="lower", vmin=-5, vmax=5)
+
+    for i in range(N_COMPONENTS):
+        axes[0, i].set_title(f"Component {i + 1}")
+        pred_model_A = pred_model_As[i]
+        pred_model_v = pred_model_vs[i] - inferred_v_systs[i] + init_v_syst
+        pred_model_σ = pred_model_σs[i]
+        pred_model_s = pred_model_ss[i]
+        pred_model_k = pred_model_ks[i]
+        pred_model_I = pred_model_Is[i]
+        im00 = axes[0, i].imshow(pred_model_I.reshape(ny, nx), **I_kwargs, interpolation="gaussian")
+        im10 = axes[1, i].imshow(pred_model_A.reshape(ny, nx), **A_kwargs, interpolation="gaussian")
+        im20 = axes[2, i].imshow(
+            pred_model_v.reshape(ny, nx), **dv_kwargs, interpolation="gaussian"
+        )
+        im30 = axes[3, i].imshow(pred_model_σ.reshape(ny, nx), **w_kwargs, interpolation="gaussian")
+        im40 = axes[4, i].imshow(pred_model_s.reshape(ny, nx), **s_kwargs, interpolation="gaussian")
+        im50 = axes[5, i].imshow(pred_model_k.reshape(ny, nx), **k_kwargs, interpolation="gaussian")
+
+        # Overlay the mask
+        mask_overlay = jnp.where(component_masks[i], np.nan, 1.0)
+        axes[0, i].imshow(mask_overlay, cmap="gray", origin="lower", alpha=mask_alpha)
+        axes[1, i].imshow(mask_overlay, cmap="gray", origin="lower", alpha=mask_alpha)
+        axes[2, i].imshow(mask_overlay, cmap="gray", origin="lower", alpha=mask_alpha)
+        axes[3, i].imshow(mask_overlay, cmap="gray", origin="lower", alpha=mask_alpha)
+        axes[4, i].imshow(mask_overlay, cmap="gray", origin="lower", alpha=mask_alpha)
+        axes[5, i].imshow(mask_overlay, cmap="gray", origin="lower", alpha=mask_alpha)
+
+    for ax in axes.flatten():
+        ax.set_xticks([])
+        ax.set_yticks([])
+    axes[-1, 0].set_xlabel(r"x sky [pix]")
+    axes[-1, 0].set_ylabel(r"y sky [pix]")
+    fig.colorbar(im00, ax=axes[0, :], location="right", label="Int Intensity [K km/s]")
+    fig.colorbar(im10, ax=axes[1, :], location="right", label="Line peak [K]")
+    fig.colorbar(im20, ax=axes[2, :], location="right", label="Line centre [km/s]")
+    fig.colorbar(im30, ax=axes[3, :], location="right", label="Line width [km/s]")
+    fig.colorbar(im40, ax=axes[4, :], location="right", label="Line skew [h3]")
+    fig.colorbar(im50, ax=axes[5, :], location="right", label="Line kurtosis [h4]")
+    if SAVE:
+        plt.savefig(PLOTS_DIR / "inferred_fields_with_masks.pdf", **SAVEFIG_KWARGS)
     plt.show()
