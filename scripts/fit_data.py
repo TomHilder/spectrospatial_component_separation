@@ -244,8 +244,8 @@ if __name__ == "__main__":
     A_kwargs = dict(cmap="viridis", origin="lower", vmin=0, vmax=A_max)
     v_kwargs = dict(cmap="RdBu_r", origin="lower", vmin=-v_max, vmax=v_max)
     w_kwargs = dict(cmap="magma", origin="lower", vmin=0, vmax=w_max)
-    s_kwargs = dict(cmap="PiYG", origin="lower", vmin=-s_max, vmax=s_max)
-    k_kwargs = dict(cmap="RdBu_r", origin="lower", vmin=-k_max, vmax=k_max)
+    s_kwargs = dict(cmap="PiYG", origin="lower", vmin=-0.9 * s_max, vmax=0.9 * s_max)
+    k_kwargs = dict(cmap="PuOr", origin="lower", vmin=-0.9 * k_max, vmax=0.9 * k_max)
 
     # Plot some random spectra with peak > 1x RMS and their fits
     rms_thresh = 5
