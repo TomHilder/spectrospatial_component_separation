@@ -87,13 +87,16 @@ if __name__ == "__main__":
     n_modes = (151, 151)
 
     # Kernels
-    # kernel_peak = Matern32
-    # kernel_velocity = Matern32
-    kernel_peak = Matern52
-    kernel_velocity = Matern52
-    kernel_broadening = Matern52
-    kernel_skew = Matern52
-    kernel_kurtosis = Matern52
+    # kernel_peak = Matern52
+    # kernel_velocity = Matern52
+    # kernel_broadening = Matern52
+    # kernel_skew = Matern52
+    # kernel_kurtosis = Matern52
+    kernel_peak = Matern32
+    kernel_velocity = Matern32
+    kernel_broadening = Matern32
+    kernel_skew = Matern32
+    kernel_kurtosis = Matern32
 
     # Need to account for if I use different larger nx, ny which is MORE image, and MORE sky area
     # But I want the same physical scale, so length scale in pixels should decrease as nx increases
@@ -206,6 +209,7 @@ if __name__ == "__main__":
 
     plt.figure()
     plt.plot(schedule.loss_history)
+    # plt.yscale("log")
     plt.show()
 
     save_model(schedule.model_history[-1], PLOTS_DIR / "fitted_model.pkl", overwrite=True)
@@ -542,11 +546,11 @@ if __name__ == "__main__":
         pred_model_As[i] * pred_model_σs[i] * jnp.sqrt(2 * jnp.pi) for i in range(N_COMPONENTS)
     ]
 
+    I_min = min(pred_model_Is[i].min() for i in range(N_COMPONENTS))
     I_max = max(pred_model_Is[i].max() for i in range(N_COMPONENTS)) * 0.9
     w_max = max(pred_model_σs[i].max() for i in range(N_COMPONENTS))
 
-    I_kwargs = dict(cmap="viridis", origin="lower", vmin=0, vmax=I_max)
-
+    I_kwargs = dict(cmap="viridis", origin="lower", vmin=I_min, vmax=I_max)
     fig, axes = plt.subplots(6, N_COMPONENTS, figsize=(16, 16), layout="compressed")
     fs = 14
 
@@ -648,9 +652,9 @@ if __name__ == "__main__":
     plt.show()
 
     # Assemble masks for each component based on integrated intensity above some threshold
-    intensity_threshold = 0.3 * I_max  # Example threshold at 10%
+    intensity_thresholds = [0.35 * jnp.max(pred_model_Is[i]) for i in range(N_COMPONENTS)]
     component_masks = [
-        (pred_model_Is[i].reshape(ny, nx) > intensity_threshold) for i in range(N_COMPONENTS)
+        (pred_model_Is[i].reshape(ny, nx) > intensity_thresholds[i]) for i in range(N_COMPONENTS)
     ]
 
     # Plot the masks
