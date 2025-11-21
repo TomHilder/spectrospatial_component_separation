@@ -208,12 +208,18 @@ def merge_dicts(dict_list):
     return out
 
 
-def get_phases(n_modes: tuple[int, int], n_components: int) -> list[PhaseConfig]:
+def get_phases(
+    n_modes: tuple[int, int],
+    n_components: int,
+    n_step_mult: float = 1,
+) -> list[PhaseConfig]:
     lr_1 = 1e-1
     lr_2 = 1e-2
 
+    n_steps = int(N_STEPS * n_step_mult)
+
     def get_phase(
-        n_steps=N_STEPS,
+        n_steps=n_steps,
         lr=lr_1,
         fix_peak=True,
         fix_velocity=True,

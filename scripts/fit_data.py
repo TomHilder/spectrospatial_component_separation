@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import mpl_drip  # noqa: F401
 import numpy as np
+from corner import corner
 from model_data import (
     KLineMixture,
     get_phases,
@@ -14,6 +15,7 @@ from mpl_drip import colormaps  # noqa: F401
 from numpy import pi as π
 from numpy import save
 from read_data import DATA_FNAME
+from scipy.stats import gaussian_kde
 from spectracles import (
     Matern32,
     Matern52,
@@ -27,6 +29,10 @@ from spectracles import (
 
 plt.style.use("mpl_drip.custom")
 rng = np.random.default_rng(6742)
+
+
+LOAD_MODEL = "m33/400x400_3comp_skew_kurt/fitted_model.model"
+# LOAD_MODEL = None
 
 if __name__ == "__main__":
     DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -183,7 +189,7 @@ if __name__ == "__main__":
         h3_max=h3_max,
         h4_max=h4_max,
     )
-    phases = get_phases(n_modes, n_components=N_COMPONENTS)
+    phases = get_phases(n_modes, n_components=N_COMPONENTS, n_step_mult=4.0)
     init_model = my_model.get_locked_model()
 
     # Optionally print the nested model structure
@@ -197,24 +203,29 @@ if __name__ == "__main__":
     #     fig_model = my_model.plot_model_graph(ax=ax)
     #     plt.show()
 
-    schedule = OptimiserSchedule(model=my_model, loss_fn=neg_ln_posterior, phase_configs=phases)
-    data_shape = (nλ, ny * nx)
-    schedule.run_all(
-        velocities=vels,
-        xy_data=spatial_data,
-        data=data.reshape(data_shape),
-        u_data=u_data.reshape(data_shape),
-        mask=jnp.ones(data_shape, dtype=bool),  # Nothing is masked here
-    )
+    if LOAD_MODEL is None:
+        schedule = OptimiserSchedule(model=my_model, loss_fn=neg_ln_posterior, phase_configs=phases)
+        data_shape = (nλ, ny * nx)
+        schedule.run_all(
+            velocities=vels,
+            xy_data=spatial_data,
+            data=data.reshape(data_shape),
+            u_data=u_data.reshape(data_shape),
+            mask=jnp.ones(data_shape, dtype=bool),  # Nothing is masked here
+        )
 
-    plt.figure()
-    plt.plot(schedule.loss_history)
-    # plt.yscale("log")
-    plt.show()
+        plt.figure()
+        plt.plot(schedule.loss_history)
+        # plt.yscale("log")
+        plt.show()
 
-    save_model(schedule.model_history[-1], PLOTS_DIR / "fitted_model.pkl", overwrite=True)
+        save_model(schedule.model_history[-1], PLOTS_DIR / "fitted_model.pkl", overwrite=True)
 
-    pred_model = schedule.model_history[-1].get_locked_model()
+        pred_model = schedule.model_history[-1].get_locked_model()
+    else:
+        pred_model = load_model(Path(LOAD_MODEL)).get_locked_model()
+        # Check that the model matches up with the assumptions above
+        assert pred_model.K == N_COMPONENTS, "Loaded model has different number of components!"
 
     # Plot the inferred fields next to the true fields
     lines_pred_funcs = [getattr(pred_model.lines, f"line{k + 1}") for k in range(pred_model.K)]
@@ -719,4 +730,409 @@ if __name__ == "__main__":
     fig.colorbar(im50, ax=axes[5, :], location="right", label="Line kurtosis [h4]")
     if SAVE:
         plt.savefig(PLOTS_DIR / "inferred_fields_with_masks.pdf", **SAVEFIG_KWARGS)
+    plt.show()
+
+    # The plot req:
+    # "I’m wondering if you could add a “distribution of line widths” plot to your plot arrays showing the different components. It would be good to see both the raw pixel distributions, and a mass-weighted distribution (ie, fraction of mass in different width components), for both the individual components and the galaxy as a whole."
+
+    # So the plan is to make histograms of the line widths for each component, both raw and mass-weighted
+    # And then also make the same plots but for all components combined
+    # I think the combined should just go as another panel below the per-component ones
+
+    # What are the units for
+
+    # First, gather the line widths and intensities for each component
+    line_widths = [pred_model_σs[i].reshape(-1) for i in range(N_COMPONENTS)]
+    line_intensities = [pred_model_Is[i].reshape(-1) for i in range(N_COMPONENTS)]
+
+    total_line_widths = jnp.concatenate(line_widths)
+    total_line_intensities = jnp.concatenate(line_intensities)
+
+    # Define histogram bins
+    w_bins = jnp.linspace(0, w_max, 30)
+    w_bin_centers = 0.5 * (w_bins[:-1] + w_bins[1:])
+
+    # Plot histograms for each component
+    fig, axes = plt.subplots(
+        N_COMPONENTS + 1,
+        2,
+        figsize=(12, 4 * (N_COMPONENTS + 1)),
+        layout="compressed",
+        sharex=True,
+        sharey=True,
+    )
+    for i in range(N_COMPONENTS + 1):
+        if i <= N_COMPONENTS - 1:
+            widths = line_widths[i]
+            intensities = line_intensities[i]
+            label = f"Component {i + 1}"
+        else:
+            widths = total_line_widths
+            intensities = total_line_intensities
+            label = "All Components"
+        # Raw histogram
+        axes[i, 0].hist(
+            widths,
+            bins=w_bins,
+            color=f"C{i}",
+            alpha=0.7,
+            label=label,
+            density=True,
+        )
+        # axes[i, 0].set_ylabel("Number of Pixels")
+        axes[i, 0].legend()
+
+        # Mass-weighted histogram
+        axes[i, 1].hist(
+            widths,
+            bins=w_bins,
+            weights=intensities,
+            color=f"C{i}",
+            alpha=0.7,
+            label=label,
+            density=True,
+        )
+        if i == N_COMPONENTS:
+            axes[i, 0].set_xlabel("Line Width [km/s]")
+            axes[i, 1].set_xlabel("Line Width [km/s]")
+        # axes[i, 1].set_ylabel("Mass-Weighted Intensity")
+        if i == 0:
+            axes[i, 0].set_title(r"\textbf{Line Widths}")
+            axes[i, 1].set_title(r"\textbf{Intensity-Weighted Line Widths}")
+        axes[i, 1].legend()
+
+    if SAVE:
+        plt.savefig(PLOTS_DIR / "line_width_distributions_per_component.pdf", **SAVEFIG_KWARGS)
+    plt.show()
+
+    # Now, let's make the analogous plots but for the skew and kurtosis fields (still with not-weighted and intensity-weighted)
+    line_skews = [pred_model_ss[i].reshape(-1) for i in range(N_COMPONENTS)]
+    line_kurtoses = [pred_model_ks[i].reshape(-1) for i in range(N_COMPONENTS)]
+    total_line_skews = jnp.concatenate(line_skews)
+    total_line_kurtoses = jnp.concatenate(line_kurtoses)
+
+    # One plot for skew, one for kurtosis
+    # Columns of not-weighted and intensity-weighted again
+
+    # Define histogram bins
+    s_bins = jnp.linspace(-0.9 * s_max, 0.9 * s_max, 30)
+    s_bin_centers = 0.5 * (s_bins[:-1] + s_bins[1:])
+    k_bins = jnp.linspace(-0.9 * k_max, 0.9 * k_max, 30)
+    k_bin_centers = 0.5 * (k_bins[:-1] + k_bins[1:])
+
+    # Skew plot
+    fig, axes = plt.subplots(
+        N_COMPONENTS + 1,
+        2,
+        figsize=(12, 4 * (N_COMPONENTS + 1)),
+        layout="compressed",
+        sharex=True,
+        sharey=True,
+    )
+    for i in range(N_COMPONENTS + 1):
+        if i <= N_COMPONENTS - 1:
+            skews = line_skews[i]
+            intensities = line_intensities[i]
+            label = f"Component {i + 1}"
+        else:
+            skews = total_line_skews
+            intensities = total_line_intensities
+            label = "All Components"
+        # Raw histogram
+        axes[i, 0].hist(
+            skews,
+            bins=s_bins,
+            color=f"C{i}",
+            alpha=0.7,
+            label=label,
+            density=True,
+        )
+        axes[i, 0].legend()
+
+        # Mass-weighted histogram
+        axes[i, 1].hist(
+            skews,
+            bins=s_bins,
+            weights=intensities,
+            color=f"C{i}",
+            alpha=0.7,
+            label=label,
+            density=True,
+        )
+        if i == N_COMPONENTS:
+            axes[i, 0].set_xlabel("Line Skew [h3]")
+            axes[i, 1].set_xlabel("Line Skew [h3]")
+        if i == 0:
+            axes[i, 0].set_title(r"\textbf{Line Skews}")
+            axes[i, 1].set_title(r"\textbf{Intensity-Weighted Line Skews}")
+        axes[i, 1].legend()
+
+    if SAVE:
+        plt.savefig(PLOTS_DIR / "line_skew_distributions_per_component.pdf", **SAVEFIG_KWARGS)
+    plt.show()
+
+    # Kurtosis plot
+    fig, axes = plt.subplots(
+        N_COMPONENTS + 1,
+        2,
+        figsize=(12, 4 * (N_COMPONENTS + 1)),
+        layout="compressed",
+        sharex=True,
+        sharey=True,
+    )
+    for i in range(N_COMPONENTS + 1):
+        if i <= N_COMPONENTS - 1:
+            kurtoses = line_kurtoses[i]
+            intensities = line_intensities[i]
+            label = f"Component {i + 1}"
+        else:
+            kurtoses = total_line_kurtoses
+            intensities = total_line_intensities
+            label = "All Components"
+        # Raw histogram
+        axes[i, 0].hist(
+            kurtoses,
+            bins=k_bins,
+            color=f"C{i}",
+            alpha=0.7,
+            label=label,
+            density=True,
+        )
+        axes[i, 0].legend()
+
+        # Mass-weighted histogram
+        axes[i, 1].hist(
+            kurtoses,
+            bins=k_bins,
+            weights=intensities,
+            color=f"C{i}",
+            alpha=0.7,
+            label=label,
+            density=True,
+        )
+        if i == N_COMPONENTS:
+            axes[i, 0].set_xlabel("Line Kurtosis [h4]")
+            axes[i, 1].set_xlabel("Line Kurtosis [h4]")
+        if i == 0:
+            axes[i, 0].set_title(r"\textbf{Line Kurtoses}")
+            axes[i, 1].set_title(r"\textbf{Intensity-Weighted Line Kurtoses}")
+        axes[i, 1].legend()
+
+    if SAVE:
+        plt.savefig(PLOTS_DIR / "line_kurtosis_distributions_per_component.pdf", **SAVEFIG_KWARGS)
+    plt.show()
+
+    # I guess we could do a corner plot per-component to show the joint distributions of line width, skew, kurtosis?
+    # Although, how do we weight those by intensity then? I guess we need to write a custom corner plot function that takes weights?
+
+    # OK the below plot is great, but it would be good to overlay the components in different colors. I guess we need contours for that though, since it's 2D histograms.
+
+    # Plot per component:
+    for i in range(N_COMPONENTS):
+        fig, ax = plt.subplots(
+            2, 2, figsize=(8, 8), layout="compressed", sharex="col", sharey="row"
+        )
+        widths = line_widths[i]
+        skews = line_skews[i]
+        kurtoses = line_kurtoses[i]
+        intensities = line_intensities[i]
+
+        # Width vs Skew
+        ax[0, 0].hist2d(
+            widths,
+            skews,
+            bins=[w_bins, s_bins],
+            weights=intensities,
+            cmap="Blues",
+            density=True,
+        )
+        ax[0, 0].set_ylabel("Line Skew [h3]")
+
+        # Width vs Kurtosis
+        ax[1, 0].hist2d(
+            widths,
+            kurtoses,
+            bins=[w_bins, k_bins],
+            weights=intensities,
+            cmap="Blues",
+            density=True,
+        )
+        ax[1, 0].set_xlabel("Line Width [km/s]")
+        ax[1, 0].set_ylabel("Line Kurtosis [h4]")
+
+        # Skew vs Kurtosis
+        ax[1, 1].hist2d(
+            skews,
+            kurtoses,
+            bins=[s_bins, k_bins],
+            weights=intensities,
+            cmap="Blues",
+            density=True,
+        )
+        ax[1, 1].set_xlabel("Line Skew [h3]")
+
+        # Hide unused subplots
+        ax[0, 1].axis("off")
+        fig.suptitle(f"Component {i + 1} Joint Distributions Weighted by Intensity", fontsize=16)
+        if SAVE:
+            plt.savefig(
+                PLOTS_DIR / f"joint_distributions_component_{i + 1}_weighted.pdf",
+                **SAVEFIG_KWARGS,
+            )
+        plt.show()
+
+    # Another plot suggestion from colleague:
+    # One thing that there isn’t quite a plot to capture is the relative amount in the different components, especially if one is going to suggest associating them with different features.  One plot concept that would also add information would be a 2-d plot of line-width versus kurtosis, with density showing the integrated intensity per pixel in sigma-k space. One could overlay the different components in different colors, or contours or somesuch, or 3 panels where there hasn’t been an attempt to normalize (i.e., components that have more total flux appear brighter).  I’m suggesting line-width vs kurtosis because I’d expect self-extincted HI to be both narrow and flat-topped.
+
+    # 2D histogram of line width vs kurtosis, weighted, PER COMPONENT
+    fig, axes = plt.subplots(
+        1,
+        N_COMPONENTS,
+        figsize=(4 * N_COMPONENTS, 4),
+        layout="compressed",
+        sharex=True,
+        sharey=True,
+    )
+    for i in range(N_COMPONENTS):
+        widths = line_widths[i]
+        kurtoses = line_kurtoses[i]
+        intensities = line_intensities[i]
+        weights = intensities
+        xedges = w_bins
+        yedges = k_bins
+        H, xedges, yedges = jnp.histogram2d(
+            widths,
+            kurtoses,
+            bins=[xedges, yedges],
+            weights=weights,
+            density=True,
+        )
+        H = H.T  # Transpose for correct orientation
+        # Plot the 2D histogram
+        X, Y = jnp.meshgrid(xedges, yedges)
+        im = axes[i].pcolormesh(X, Y, H, cmap="Blues", shading="auto")
+        # axes[i].set_title(f"Component {i + 1}: Line Width vs Kurtosis Weighted by Intensity")
+        axes[i].text(
+            s=f"Component {i + 1}",
+            fontsize=18,
+            va="top",
+            ha="left",
+            x=0.05,
+            y=0.95,
+            transform=axes[i].transAxes,
+        )
+    axes[0].set_ylabel("Line Kurtosis [h4]")
+    axes[0].set_xlabel("Line Width [km/s]")
+    if SAVE:
+        plt.savefig(PLOTS_DIR / "line_width_vs_kurtosis_per_component.pdf", **SAVEFIG_KWARGS)
+    plt.show()
+
+    # Helper: evaluate a weighted 2D KDE on a grid defined by bin edges
+    def kde_on_bins(x, y, w, x_bins, y_bins, bw_method=None):
+        # Grid centres
+        x_centers = 0.5 * (x_bins[:-1] + x_bins[1:])
+        y_centers = 0.5 * (y_bins[:-1] + y_bins[1:])
+        xx, yy = np.meshgrid(x_centers, y_centers, indexing="xy")
+
+        points = np.vstack([x, y])  # shape (2, N)
+        kde = gaussian_kde(points, weights=w, bw_method=bw_method)
+
+        grid = np.vstack([xx.ravel(), yy.ravel()])
+        zz = kde(grid).reshape(xx.shape)  # KDE values on the grid
+
+        return xx, yy, zz
+
+    fig, ax = plt.subplots(2, 2, figsize=(8, 8), layout="compressed", sharex="col", sharey="row")
+
+    # --- Background 2D histograms (all components combined, weighted) ---
+
+    widths_bounds = (0, 15)
+    skew_bounds = (-0.25, 0.25)
+    kurtosis_bounds = (-0.15, 0.15)
+
+    all_widths = np.array(line_widths).reshape(-1)
+    all_skews = np.array(line_skews).reshape(-1)
+    all_kurtoses = np.array(line_kurtoses).reshape(-1)
+    all_weights = np.array(line_intensities).reshape(-1)
+
+    # Width vs Skew
+    ax[0, 0].hist2d(
+        all_widths,
+        all_skews,
+        bins=[w_bins, s_bins],
+        weights=all_weights,
+        cmap="Greys",
+        density=True,
+    )
+    ax[0, 0].set_ylabel("Line Skew [h3]")
+
+    # Width vs Kurtosis
+    ax[1, 0].hist2d(
+        all_widths,
+        all_kurtoses,
+        bins=[w_bins, k_bins],
+        weights=all_weights,
+        cmap="Greys",
+        density=True,
+    )
+    ax[1, 0].set_xlabel("Line Width [km/s]")
+    ax[1, 0].set_ylabel("Line Kurtosis [h4]")
+
+    # Skew vs Kurtosis
+    ax[1, 1].hist2d(
+        all_skews,
+        all_kurtoses,
+        bins=[s_bins, k_bins],
+        weights=all_weights,
+        cmap="Greys",
+        density=True,
+    )
+    ax[1, 1].set_xlabel("Line Skew [h3]")
+
+    # Hide unused
+    ax[0, 1].axis("off")
+
+    # --- Per-component KDE contours ---
+
+    for j in range(N_COMPONENTS):
+        widths = line_widths[j]
+        skews = line_skews[j]
+        kurtoses = line_kurtoses[j]
+        weights = line_intensities[j]
+        contour_kwargs = dict(levels=7, linewidths=1.0, colors=[f"C{j}"], alpha=0.7)
+
+        # Width vs Skew KDE
+        xx_ws, yy_ws, zz_ws = kde_on_bins(widths, skews, weights, w_bins, s_bins)
+        cs = ax[0, 0].contour(xx_ws, yy_ws, zz_ws, **contour_kwargs)
+
+        # Width vs Kurtosis KDE
+        xx_wk, yy_wk, zz_wk = kde_on_bins(widths, kurtoses, weights, w_bins, k_bins)
+        ax[1, 0].contour(xx_wk, yy_wk, zz_wk, **contour_kwargs)
+
+        # Skew vs Kurtosis KDE
+        xx_sk, yy_sk, zz_sk = kde_on_bins(skews, kurtoses, weights, s_bins, k_bins)
+        ax[1, 1].contour(xx_sk, yy_sk, zz_sk, **contour_kwargs)
+
+    fig.suptitle("Component Distributions", fontsize=16)
+
+    ax[0, 0].set_xlim(widths_bounds)
+    ax[0, 0].set_ylim(skew_bounds)
+    ax[1, 0].set_xlim(widths_bounds)
+    ax[1, 0].set_ylim(kurtosis_bounds)
+    ax[1, 1].set_xlim(skew_bounds)
+    ax[1, 1].set_ylim(kurtosis_bounds)
+
+    # Draw a legend with component colors
+    handles = [
+        plt.Line2D([0], [0], color=f"C{i}", lw=2, label=f"Component {i + 1}")
+        for i in range(N_COMPONENTS)
+    ]
+    fig.legend(handles=handles, loc="upper right", bbox_to_anchor=(0.9, 0.9))
+
+    if SAVE:
+        plt.savefig(
+            PLOTS_DIR / "joint_distributions_components_weighted_kde.pdf",
+            **SAVEFIG_KWARGS,
+        )
+
     plt.show()

@@ -233,6 +233,18 @@ wheels = [
 ]
 
 [[package]]
+name = "corner"
+version = "2.2.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5c/61/2d728798e9ae3bf899d962f77486cb29888d57f6fbf9561bc1435a6b1a74/corner-2.2.3.tar.gz", hash = "sha256:471b7b63395d8f1dee176bb779348ade38d56abd23404a48802a593607745e1c", size = 5932840 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4e/4a/5bd0a8b981c5a93153d9eb7c63143b407cc7f8dfc9f91eedc9b6f5289eca/corner-2.2.3-py3-none-any.whl", hash = "sha256:39674b223482456c3a78234dc7bdefd21188a2d47bb8cd468104a0501f6659ec", size = 15946 },
+]
+
+[[package]]
 name = "cycler"
 version = "0.12.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1328,6 +1340,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "astropy" },
+    { name = "corner" },
     { name = "dill" },
     { name = "ipykernel" },
     { name = "jax" },
@@ -1345,6 +1358,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "astropy", specifier = ">=7.1.1" },
+    { name = "corner", specifier = ">=2.2.3" },
     { name = "dill", specifier = ">=0.4.0" },
     { name = "ipykernel", specifier = ">=7.1.0" },
     { name = "jax", specifier = ">=0.7.2" },
